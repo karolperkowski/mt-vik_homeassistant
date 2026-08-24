@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Verify tag matches manifest version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          MANIFEST_VERSION=$(python -c "import json; print(json.load(open('custom_components/mtviki_matrix/manifest.json'))['version'])")
+          if [ "$VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "::error::Tag '$TAG' (version '$VERSION') does not match custom_components/mtviki_matrix/manifest.json version '$MANIFEST_VERSION'. Bump the manifest version to match the tag before releasing."
+            exit 1
+          fi
+          echo "OK: tag $TAG matches manifest.json version $MANIFEST_VERSION"
+
+      - uses: astral-sh/ruff-action@v3
+        with:
+          version: "0.16.4"
+
+      - name: Ruff format check
+        run: ruff format --check custom_components tests mtviki_probe.py
+
+      - name: Install test requirements
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements_test.txt
+
+      - name: Run the suite
+        run: python -m pytest
+
+  release:
+    name: release
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" --generate-notes
