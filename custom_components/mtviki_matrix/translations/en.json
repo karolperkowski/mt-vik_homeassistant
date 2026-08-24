@@ -1,0 +1,265 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to your MT-VIKI HDMI matrix",
+        "description": "Set up a MT-VIKI HDMI matrix switcher over TCP (tested with the MT-HD0808).",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "matrix_size": "Matrix size"
+        },
+        "data_description": {
+          "host": "Hostname or IP address of the matrix.",
+          "port": "TCP control port of the matrix (default 8080).",
+          "matrix_size": "Number of inputs and outputs of your model."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MT-VIKI HDMI matrix options",
+        "data": {
+          "enable_polling": "Enable polling",
+          "poll_interval": "Poll interval"
+        },
+        "data_description": {
+          "enable_polling": "Periodically query routing, key lock, and beep state in addition to push updates.",
+          "poll_interval": "Seconds between polls (minimum 10)."
+        }
+      }
+    }
+  },
+  "selector": {
+    "matrix_size": {
+      "options": {
+        "2x2": "2x2 (2 inputs, 2 outputs)",
+        "4x2": "4x2 (4 inputs, 2 outputs)",
+        "4x4": "4x4 (4 inputs, 4 outputs)",
+        "8x8": "8x8 (8 inputs, 8 outputs)",
+        "16x16": "16x16 (16 inputs, 16 outputs)"
+      }
+    }
+  },
+  "entity": {
+    "select": {
+      "output_route": {
+        "name": "Output {output_number}"
+      },
+      "output_hdcp": {
+        "name": "Output {output_number} HDCP",
+        "state": {
+          "off": "Off",
+          "hdcp_1_4": "HDCP 1.4",
+          "hdcp_2_0": "HDCP 2.0",
+          "hdcp_2_2": "HDCP 2.2"
+        }
+      },
+      "input_edid": {
+        "name": "Input {input_number} EDID",
+        "state": {
+          "1": "EDID 1",
+          "2": "EDID 2",
+          "3": "EDID 3",
+          "4": "EDID 4",
+          "5": "EDID 5",
+          "6": "EDID 6",
+          "7": "EDID 7",
+          "8": "EDID 8",
+          "9": "EDID 9",
+          "10": "EDID 10",
+          "11": "EDID 11",
+          "12": "EDID 12",
+          "13": "EDID 13",
+          "14": "EDID 14",
+          "15": "EDID 15",
+          "16": "EDID 16"
+        }
+      }
+    },
+    "switch": {
+      "keylock": {
+        "name": "Key lock"
+      },
+      "beep": {
+        "name": "Beep"
+      }
+    },
+    "button": {
+      "locate": {
+        "name": "Locate"
+      },
+      "scene": {
+        "name": "Scene {scene_number}"
+      }
+    },
+    "sensor": {
+      "firmware": {
+        "name": "Firmware version"
+      },
+      "model_id": {
+        "name": "Model ID"
+      },
+      "device_ip": {
+        "name": "Device IP"
+      },
+      "ip_mask": {
+        "name": "IP mask"
+      },
+      "input_hdcp": {
+        "name": "Input {input_number} HDCP"
+      }
+    },
+    "media_player": {
+      "output_player": {
+        "name": "Output {output_number}"
+      }
+    },
+    "text": {
+      "title_label": {
+        "name": "Title label"
+      },
+      "service_type": {
+        "name": "Service type"
+      },
+      "service_number": {
+        "name": "Service number"
+      }
+    }
+  },
+  "services": {
+    "set_route": {
+      "name": "Set route",
+      "description": "Routes an input to one or more outputs.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The matrix to control."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Config entry of the matrix to control (alternative to selecting a device)."
+        },
+        "input": {
+          "name": "Input",
+          "description": "Input port number (1-based)."
+        },
+        "outputs": {
+          "name": "Outputs",
+          "description": "List of output port numbers, or the string 'all' to route the input to every output."
+        }
+      }
+    },
+    "save_scene": {
+      "name": "Save scene",
+      "description": "Saves the current routing as a scene on the matrix.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The matrix to control."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Config entry of the matrix to control (alternative to selecting a device)."
+        },
+        "scene": {
+          "name": "Scene",
+          "description": "Scene number (1-16)."
+        }
+      }
+    },
+    "recall_scene": {
+      "name": "Recall scene",
+      "description": "Recalls a stored routing scene on the matrix.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The matrix to control."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Config entry of the matrix to control (alternative to selecting a device)."
+        },
+        "scene": {
+          "name": "Scene",
+          "description": "Scene number (1-16)."
+        }
+      }
+    },
+    "set_output_hdcp": {
+      "name": "Set output HDCP",
+      "description": "Sets the HDCP mode of an output. Mode value semantics are unverified on hardware; the adopted mapping is 0 = off, 1 = HDCP 1.4, 2 = HDCP 2.0, 3 = HDCP 2.2.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The matrix to control."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Config entry of the matrix to control (alternative to selecting a device)."
+        },
+        "output": {
+          "name": "Output",
+          "description": "Output port number (1-based)."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "HDCP mode: 0 = off, 1 = HDCP 1.4, 2 = HDCP 2.0, 3 = HDCP 2.2."
+        }
+      }
+    },
+    "set_input_edid": {
+      "name": "Set input EDID",
+      "description": "Assigns an EDID preset to an input. Valid preset values are not documented by the vendor; 1-16 are accepted.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The matrix to control."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Config entry of the matrix to control (alternative to selecting a device)."
+        },
+        "input": {
+          "name": "Input",
+          "description": "Input port number (1-based)."
+        },
+        "edid": {
+          "name": "EDID preset",
+          "description": "EDID preset number (1-16)."
+        }
+      }
+    },
+    "locate": {
+      "name": "Locate",
+      "description": "Beeps the matrix repeatedly so it can be found in the rack.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The matrix to locate."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Config entry of the matrix to locate (alternative to selecting a device)."
+        },
+        "count": {
+          "name": "Beep count",
+          "description": "Number of beeps (1-20)."
+        },
+        "interval": {
+          "name": "Interval",
+          "description": "Seconds between beeps (0.1-2.0)."
+        }
+      }
+    }
+  }
+}

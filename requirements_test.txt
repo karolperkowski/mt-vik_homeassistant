@@ -1,0 +1,42 @@
+# Test-only requirements for the mtviki_matrix custom integration.
+#
+# The integration itself has ZERO runtime dependencies (manifest requirements: []);
+# the protocol client is vendored in custom_components/mtviki_matrix/api.py.
+#
+# ---------------------------------------------------------------------------
+# Verified working set (2026-08-23, macOS 14, CPython 3.14.7):
+#   94 tests collected, 94 passed.
+#
+# pytest-homeassistant-custom-component pins Home Assistant and the whole HA
+# test toolchain (pytest, pytest-asyncio, pytest-socket, syrupy, freezegun, ...),
+# so it is the only line that really needs pinning. The rest are recorded for
+# reproducibility.
+# ---------------------------------------------------------------------------
+pytest-homeassistant-custom-component==0.13.357
+
+# Pulled in transitively by the pin above -- listed to document the exact
+# versions the suite was verified against. Do not bump these independently of
+# pytest-homeassistant-custom-component; it owns their resolution.
+#   homeassistant==2026.8.3
+#   pytest==9.0.3
+#   pytest-asyncio==1.4.0
+#   pytest-cov==7.1.0
+#   pytest-socket==0.8.0
+
+# ---------------------------------------------------------------------------
+# Python version notes
+# ---------------------------------------------------------------------------
+# * Python 3.14 -- works. Resolves to HA 2026.8.3 / phacc 0.13.357. Recommended.
+# * Python 3.13 -- expected to work (HA's own supported version); untested here.
+# * Python 3.12 -- pip backtracks to phacc 0.13.205 / HA 2025.1.4, which predates
+#   `homeassistant.helpers.entity_platform.AddConfigEntryEntitiesCallback` that
+#   this integration's platforms import. tests/test_api.py and
+#   tests/test_mock_matrix.py still pass in full; one config-flow test
+#   (test_setup_and_unload_entry) fails on the import. Use 3.13+ for the full
+#   suite.
+#
+# If pytest-homeassistant-custom-component cannot be installed at all, the
+# HA-independent half of the suite still runs with just `pytest`:
+#   pip install pytest pytest-asyncio
+#   pytest tests/test_mock_matrix.py
+# tests/test_config_flow.py then skips itself cleanly (pytest.importorskip).

@@ -1,0 +1,87 @@
+{
+  "entity": {
+    "select": {
+      "output_route": {
+        "default": "mdi:video-switch"
+      },
+      "output_hdcp": {
+        "default": "mdi:lock-check"
+      },
+      "input_edid": {
+        "default": "mdi:monitor-edit"
+      }
+    },
+    "switch": {
+      "keylock": {
+        "default": "mdi:lock",
+        "state": {
+          "off": "mdi:lock-open-variant"
+        }
+      },
+      "beep": {
+        "default": "mdi:volume-high",
+        "state": {
+          "off": "mdi:volume-off"
+        }
+      }
+    },
+    "button": {
+      "scene": {
+        "default": "mdi:palette-swatch"
+      }
+    },
+    "sensor": {
+      "firmware": {
+        "default": "mdi:chip"
+      },
+      "model_id": {
+        "default": "mdi:identifier"
+      },
+      "device_ip": {
+        "default": "mdi:ip-network"
+      },
+      "ip_mask": {
+        "default": "mdi:ip-network-outline"
+      },
+      "input_hdcp": {
+        "default": "mdi:lock-question"
+      }
+    },
+    "media_player": {
+      "output_player": {
+        "default": "mdi:video-switch"
+      }
+    },
+    "text": {
+      "title_label": {
+        "default": "mdi:format-title"
+      },
+      "service_type": {
+        "default": "mdi:text-short"
+      },
+      "service_number": {
+        "default": "mdi:text-short"
+      }
+    }
+  },
+  "services": {
+    "set_route": {
+      "service": "mdi:video-switch"
+    },
+    "save_scene": {
+      "service": "mdi:content-save"
+    },
+    "recall_scene": {
+      "service": "mdi:palette-swatch"
+    },
+    "set_output_hdcp": {
+      "service": "mdi:lock-check"
+    },
+    "set_input_edid": {
+      "service": "mdi:monitor-edit"
+    },
+    "locate": {
+      "service": "mdi:bullhorn"
+    }
+  }
+}
