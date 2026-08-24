@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-24
+
 ### Added
 
 - Crosspoint Lovelace card (`mtviki-matrix-card`): a single-file, no-build
