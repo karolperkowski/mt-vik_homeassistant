@@ -5,6 +5,7 @@ from __future__ import annotations
 from homeassistant.components.select import SelectEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import EDID_PRESET_COUNT, HDCP_MODES
@@ -35,7 +36,12 @@ async def async_setup_entry(
 
 
 class MTVikiOutputRouteSelect(MTVikiEntity, SelectEntity):
-    """Which input is routed to a given output."""
+    """Which input is routed to a given output.
+
+    Options are the user-configured input names (options flow "Name your
+    inputs" step), defaulting to "Input N"; the option shown maps to the
+    same port number either way, so writes are unaffected by naming.
+    """
 
     _attr_translation_key = "output_route"
 
@@ -47,21 +53,21 @@ class MTVikiOutputRouteSelect(MTVikiEntity, SelectEntity):
             f"{coordinator.config_entry.entry_id}_output_{output}_route"
         )
         self._attr_translation_placeholders = {"output_number": str(output)}
-        self._attr_options = [
-            f"Input {input_port}" for input_port in range(1, coordinator.inputs + 1)
-        ]
+        self._attr_options = coordinator.input_names()
 
     @property
     def current_option(self) -> str | None:
-        """Return the input currently routed to this output."""
+        """Return the (named) input currently routed to this output."""
         route = self.coordinator.data.routes.get(self._output)
         if route is None or not 1 <= route <= self.coordinator.inputs:
             return None
-        return f"Input {route}"
+        return self.coordinator.input_name(route)
 
     async def async_select_option(self, option: str) -> None:
         """Route the selected input to this output."""
-        input_port = int(option.rsplit(" ", 1)[-1])
+        input_port = self.coordinator.input_port_for_name(option)
+        if input_port is None:
+            raise HomeAssistantError(f"Unknown input option: {option}")
         await self._async_client_call(
             self.coordinator.client.async_switch(input_port, self._output),
             f"switch output {self._output} to input {input_port}",

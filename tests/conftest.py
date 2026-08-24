@@ -112,6 +112,18 @@ def build_mock_client(**overrides):
     client.stop = AsyncMock(return_value=None)
     client.set_state_callback = MagicMock()
     client.recent_traffic = MagicMock(return_value=[])
+    # Command methods used by entity-level tests (select/media_player/button);
+    # plain MagicMock attributes are not awaitable, so these need to be
+    # AsyncMock explicitly.
+    client.async_switch = AsyncMock(return_value=None)
+    client.async_switch_all = AsyncMock(return_value=None)
+    client.async_scene_save = AsyncMock(return_value=None)
+    client.async_scene_recall = AsyncMock(return_value=None)
+    client.async_set_keylock = AsyncMock(return_value=None)
+    client.async_set_beep = AsyncMock(return_value=None)
+    client.async_locate = AsyncMock(return_value=None)
+    client.async_set_output_hdcp = AsyncMock(return_value=None)
+    client.async_set_input_edid = AsyncMock(return_value=None)
     client.state = state
     return client
 

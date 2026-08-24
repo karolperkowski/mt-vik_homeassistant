@@ -415,17 +415,64 @@ async def test_pick_step_cannot_connect(hass: HomeAssistant, mock_setup_entry) -
 # ======================================================================
 
 
-async def test_options_flow_defaults(
-    hass: HomeAssistant, mock_client, mock_config_entry
-) -> None:
+async def _setup_mock_entry(hass: HomeAssistant, mock_config_entry) -> None:
     mock_config_entry.add_to_hass(hass)
     with patch(f"custom_components.{DOMAIN}.async_setup_entry", return_value=True):
         assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
-    assert result["type"] is FlowResultType.FORM
+
+async def _start_options_menu(hass: HomeAssistant, mock_config_entry):
+    return await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+
+
+async def _start_polling_options(hass: HomeAssistant, mock_config_entry):
+    """Start the options flow and hop through the menu into the polling step."""
+    result = await _start_options_menu(hass, mock_config_entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "polling"}
+    )
+    await hass.async_block_till_done()
+    return result
+
+
+async def _start_input_names_options(hass: HomeAssistant, mock_config_entry):
+    """Start the options flow and hop through the menu into the input-names step."""
+    result = await _start_options_menu(hass, mock_config_entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "input_names"}
+    )
+    await hass.async_block_till_done()
+    return result
+
+
+async def _start_scene_names_options(hass: HomeAssistant, mock_config_entry):
+    """Start the options flow and hop through the menu into the scene-names step."""
+    result = await _start_options_menu(hass, mock_config_entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "scene_names"}
+    )
+    await hass.async_block_till_done()
+    return result
+
+
+async def test_options_flow_shows_menu(
+    hass: HomeAssistant, mock_client, mock_config_entry
+) -> None:
+    await _setup_mock_entry(hass, mock_config_entry)
+    result = await _start_options_menu(hass, mock_config_entry)
+    assert result["type"] is FlowResultType.MENU
     assert result["step_id"] == "init"
+    assert set(result["menu_options"]) == {"polling", "input_names", "scene_names"}
+
+
+async def test_options_flow_defaults(
+    hass: HomeAssistant, mock_client, mock_config_entry
+) -> None:
+    await _setup_mock_entry(hass, mock_config_entry)
+    result = await _start_polling_options(hass, mock_config_entry)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "polling"
 
     schema = result["data_schema"].schema
     keys = {str(key): key for key in schema}
@@ -438,12 +485,8 @@ async def test_options_flow_defaults(
 async def test_options_flow_saves(
     hass: HomeAssistant, mock_client, mock_config_entry
 ) -> None:
-    mock_config_entry.add_to_hass(hass)
-    with patch(f"custom_components.{DOMAIN}.async_setup_entry", return_value=True):
-        assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
-        await hass.async_block_till_done()
-
-    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    await _setup_mock_entry(hass, mock_config_entry)
+    result = await _start_polling_options(hass, mock_config_entry)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"enable_polling": True, "poll_interval": 30}
     )
@@ -461,16 +504,132 @@ async def test_options_flow_rejects_short_poll_interval(
     """poll_interval has a documented minimum of 10 seconds."""
     import voluptuous as vol
 
-    mock_config_entry.add_to_hass(hass)
-    with patch(f"custom_components.{DOMAIN}.async_setup_entry", return_value=True):
-        assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
-        await hass.async_block_till_done()
-
-    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    await _setup_mock_entry(hass, mock_config_entry)
+    result = await _start_polling_options(hass, mock_config_entry)
     with pytest.raises(vol.Invalid):
         await hass.config_entries.options.async_configure(
             result["flow_id"], {"enable_polling": True, "poll_interval": 1}
         )
+
+
+# ---------------------------------------------------------------- input names
+
+
+async def test_options_flow_input_names_defaults(
+    hass: HomeAssistant, mock_client, mock_config_entry
+) -> None:
+    """8x8 entry -> 8 input-name fields, defaulting to "Input N"."""
+    await _setup_mock_entry(hass, mock_config_entry)
+    result = await _start_input_names_options(hass, mock_config_entry)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "input_names"
+
+    schema = result["data_schema"].schema
+    keys = {str(key): key for key in schema}
+    assert {f"input_{n}" for n in range(1, 9)} == set(keys)
+    for n in range(1, 9):
+        assert keys[f"input_{n}"].default() == f"Input {n}"
+
+
+async def test_options_flow_input_names_round_trip(
+    hass: HomeAssistant, mock_client, mock_config_entry
+) -> None:
+    await _setup_mock_entry(hass, mock_config_entry)
+    result = await _start_input_names_options(hass, mock_config_entry)
+    submitted = {f"input_{n}": f"Input {n}" for n in range(1, 9)}
+    submitted["input_2"] = "PlayStation"
+    submitted["input_5"] = "Apple TV"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], submitted
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert mock_config_entry.options["input_names"]["2"] == "PlayStation"
+    assert mock_config_entry.options["input_names"]["5"] == "Apple TV"
+    assert mock_config_entry.options["input_names"]["1"] == "Input 1"
+
+    # Reopening the flow reflects the names just saved.
+    result = await _start_input_names_options(hass, mock_config_entry)
+    schema = result["data_schema"].schema
+    keys = {str(key): key for key in schema}
+    assert keys["input_2"].default() == "PlayStation"
+    assert keys["input_5"].default() == "Apple TV"
+
+
+async def test_options_flow_input_names_blank_field_keeps_default(
+    hass: HomeAssistant, mock_client, mock_config_entry
+) -> None:
+    """A blank/whitespace-only name reverts to the default rather than storing empty."""
+    await _setup_mock_entry(hass, mock_config_entry)
+    result = await _start_input_names_options(hass, mock_config_entry)
+    submitted = {f"input_{n}": f"Input {n}" for n in range(1, 9)}
+    submitted["input_3"] = "   "
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], submitted
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert mock_config_entry.options["input_names"]["3"] == "Input 3"
+
+
+async def test_options_flow_input_names_preserves_other_options(
+    hass: HomeAssistant, mock_client, mock_config_entry
+) -> None:
+    """Saving input names must not clobber polling options set earlier."""
+    await _setup_mock_entry(hass, mock_config_entry)
+    result = await _start_polling_options(hass, mock_config_entry)
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {"enable_polling": True, "poll_interval": 45}
+    )
+    await hass.async_block_till_done()
+
+    result = await _start_input_names_options(hass, mock_config_entry)
+    submitted = {f"input_{n}": f"Input {n}" for n in range(1, 9)}
+    submitted["input_1"] = "Chromecast"
+    await hass.config_entries.options.async_configure(result["flow_id"], submitted)
+    await hass.async_block_till_done()
+
+    assert mock_config_entry.options["enable_polling"] is True
+    assert mock_config_entry.options["poll_interval"] == 45
+    assert mock_config_entry.options["input_names"]["1"] == "Chromecast"
+
+
+# ---------------------------------------------------------------- scene names
+
+
+async def test_options_flow_scene_names_defaults(
+    hass: HomeAssistant, mock_client, mock_config_entry
+) -> None:
+    """Always 16 scene-name fields, regardless of matrix size."""
+    await _setup_mock_entry(hass, mock_config_entry)
+    result = await _start_scene_names_options(hass, mock_config_entry)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "scene_names"
+
+    schema = result["data_schema"].schema
+    keys = {str(key): key for key in schema}
+    assert {f"scene_{n}" for n in range(1, 17)} == set(keys)
+    for n in range(1, 17):
+        assert keys[f"scene_{n}"].default() == f"Scene {n}"
+
+
+async def test_options_flow_scene_names_round_trip(
+    hass: HomeAssistant, mock_client, mock_config_entry
+) -> None:
+    await _setup_mock_entry(hass, mock_config_entry)
+    result = await _start_scene_names_options(hass, mock_config_entry)
+    submitted = {f"scene_{n}": f"Scene {n}" for n in range(1, 17)}
+    submitted["scene_1"] = "Movie Night"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], submitted
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert mock_config_entry.options["scene_names"]["1"] == "Movie Night"
+    assert mock_config_entry.options["scene_names"]["2"] == "Scene 2"
 
 
 # ======================================================================

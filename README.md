@@ -101,10 +101,29 @@ and the probe is capped at 1024 hosts per scan.
 
 **Settings → Devices & Services → MT-VIKI HDMI Matrix → Configure**
 
+Options are organized behind a menu: **Polling**, **Name your inputs**, **Name
+your scenes**.
+
 | Option | Default | Notes |
 | --- | --- | --- |
 | **Enable polling** | off | The matrix pushes changes on its own, so polling is a backup for firmware that turns out not to. |
 | **Poll interval** | 60 s | Minimum 10 s. Only used when polling is enabled. |
+
+### Naming inputs and scenes
+
+**Name your inputs** shows one text field per input (the count follows your
+configured matrix size, so an 8x8 gets 8 fields and a 16x16 gets 16); **Name
+your scenes** always shows 16, one per device scene slot. Leave a field alone
+to keep the default (`Input N` / `Scene N`).
+
+Input names replace `Input N` everywhere an input is picked: the output
+`select` entities' options, the disabled-by-default `media_player` source
+lists, and (once renamed) the label shown for whatever is currently routed.
+Under the hood it's still port numbers on the wire — the name is
+presentation only, resolved back to a port number the moment you pick it.
+Scene names become the scene recall buttons' labels and appear on the
+*Current scene* sensor below. Renaming anything reloads the config entry, so
+every entity picks up the new labels immediately.
 
 ---
 
@@ -128,6 +147,7 @@ must be switched on in the entity registry (device page → the entity → setti
 | `sensor` | **Model ID** | 1 | diagnostic | ✅ | ⚠️ unverified | The `PING` reply string (a model literal, e.g. `FHDM88LAMG`). |
 | `sensor` | **Device IP** | 1 | diagnostic | ✅ | ⚠️ unverified | `GetIP`. |
 | `sensor` | **IP mask** | 1 | diagnostic | ✅ | ⚠️ unverified | `GetIPMask`. |
+| `sensor` | **Current scene** | 1 | — | ✅ | ✅ verified | Name of the last recalled scene, or `none`. See [the current-scene caveat](#the-current-scene-sensor-is-a-best-effort-guess) — this is "last recalled and unchanged since", not a real device readback. |
 | `sensor` | **Input *N* HDCP** | `N_in` | diagnostic | ❌ **disabled** | ⚠️ unverified | Raw integer from `InPortHDCPS`. Deliberately uninterpreted — the vendor defines no semantics for the input list. |
 | `media_player` | **Output *N*** | `N_out` | — | ❌ **disabled** | ✅ verified | Same routing as the Output select, as a `SELECT_SOURCE` media player. For dashboards/voice assistants that prefer that shape. |
 | `text` | **Title label** | 1 | config | ❌ **disabled** | ⚠️ unverified | `SetTitleLable` (the vendor's misspelling is part of the protocol). |
@@ -136,6 +156,25 @@ must be switched on in the entity registry (device page → the entity → setti
 
 There is deliberately **no** factory-reset action, **no** IP-change action, and
 **no** raw EDID-data writer. See [`PROTOCOL.md` §6.4](PROTOCOL.md#64-setediddata-payload-format).
+
+### The current-scene sensor is a best-effort guess
+
+The protocol has no "what scene is active" query and no way to read back what
+a scene *contains* — only a fire-and-forget `SceneCall <n>` recall command.
+The **Current scene** sensor therefore cannot really report "the scene the
+device currently considers active"; it reports "the scene Home Assistant last
+told the device to recall, as long as the routing table hasn't changed since".
+
+Concretely: right after a scene recall (from the button, the
+`recall_scene` service, or an automation), the integration remembers the
+scene number and snapshots the routing table the device reported. Any
+routing change after that — from an output select, a `set_route` call, the
+front panel, or the IR remote — that no longer matches that snapshot clears
+the tracked scene, and the sensor goes back to `none`. It also reads `none`
+before any scene has ever been recalled through Home Assistant, even if the
+device happens to already be sitting in a state that matches one of its
+stored scenes — there's no way to know that without a readback command the
+protocol doesn't offer.
 
 ### The Locate button and the beep question
 

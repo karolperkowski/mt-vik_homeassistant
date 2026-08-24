@@ -9,6 +9,10 @@ DOMAIN = "mtviki_matrix"
 CONF_MATRIX_SIZE = "matrix_size"
 CONF_ENABLE_POLLING = "enable_polling"
 CONF_POLL_INTERVAL = "poll_interval"
+# Options-flow storage: {"<port-or-scene-number>": "user label"}. Missing
+# entries fall back to the default_input_name()/default_scene_name() below.
+CONF_INPUT_NAMES = "input_names"
+CONF_SCENE_NAMES = "scene_names"
 
 DEFAULT_PORT = 8080
 DEFAULT_MATRIX_SIZE = "8x8"
@@ -78,3 +82,13 @@ CONF_DEVICE = "device"
 DEFAULT_SCAN_NETWORK = "192.168.1.0/24"
 # Upper bound on how many hosts a single scan may probe (see api.async_discover).
 MAX_SCAN_HOSTS = 1024
+
+
+def default_input_name(port: int) -> str:
+    """Default label for an input before the user names it in options."""
+    return f"Input {port}"
+
+
+def default_scene_name(scene: int) -> str:
+    """Default label for a scene before the user names it in options."""
+    return f"Scene {scene}"

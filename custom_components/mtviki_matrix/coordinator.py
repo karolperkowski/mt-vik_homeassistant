@@ -14,14 +14,18 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import MATRIX_SIZES, MatrixState, MTVikiClient, MTVikiError
 from .const import (
     CONF_ENABLE_POLLING,
+    CONF_INPUT_NAMES,
     CONF_MATRIX_SIZE,
     CONF_POLL_INTERVAL,
+    CONF_SCENE_NAMES,
     DEFAULT_ENABLE_POLLING,
     DEFAULT_MATRIX_SIZE,
     DEFAULT_MODEL,
     DEFAULT_POLL_INTERVAL,
     DOMAIN,
     EVENT_ROUTE_CHANGED,
+    default_input_name,
+    default_scene_name,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -68,6 +72,14 @@ class MTVikiCoordinator(DataUpdateCoordinator[MatrixState]):
         # EVENT_ROUTE_CHANGED. None until the first MatrixState is seen at all
         # (that first state is a baseline sync and must not fire events).
         self._last_routes: dict[int, int] | None = None
+        # Scene-recall tracking for the "current scene" sensor. The device
+        # never exposes scene *contents*, only a recall command, so this is
+        # only ever "the last scene we recalled, and the routing hasn't
+        # changed since" -- see async_recall_scene() and
+        # _async_check_scene_divergence() below, and MTVikiCurrentSceneSensor
+        # in sensor.py for the user-facing caveat.
+        self._last_recalled_scene: int | None = None
+        self._recalled_routes_snapshot: dict[int, int] | None = None
         # The api client fires this callback from within the event loop, so we
         # can hand the state straight to the coordinator without job scheduling.
         client.set_state_callback(self._async_handle_state)
@@ -77,6 +89,7 @@ class MTVikiCoordinator(DataUpdateCoordinator[MatrixState]):
         """Handle a pushed state snapshot from the client (event loop only)."""
         self.async_set_updated_data(state)
         self._async_fire_route_change_events(state)
+        self._async_check_scene_divergence(state)
         self._async_update_device_registry(state)
 
     @callback
@@ -118,6 +131,83 @@ class MTVikiCoordinator(DataUpdateCoordinator[MatrixState]):
                 data["device_id"] = device_id
             self.hass.bus.async_fire(EVENT_ROUTE_CHANGED, data)
 
+    # ------------------------------------------------------------- naming
+
+    def input_name(self, port: int) -> str:
+        """User-configured label for an input, or the default "Input N"."""
+        names: dict[str, str] = self.config_entry.options.get(CONF_INPUT_NAMES, {})
+        return names.get(str(port)) or default_input_name(port)
+
+    def input_names(self) -> list[str]:
+        """Ordered labels for inputs 1..self.inputs (select/media_player options)."""
+        return [self.input_name(port) for port in range(1, self.inputs + 1)]
+
+    def input_port_for_name(self, name: str) -> int | None:
+        """Reverse lookup: label -> input port number.
+
+        If two inputs share a label (the user typed the same name twice) the
+        lowest-numbered match wins; there's no way to do better with a plain
+        name-keyed selector.
+        """
+        for port in range(1, self.inputs + 1):
+            if self.input_name(port) == name:
+                return port
+        return None
+
+    def scene_name(self, scene: int) -> str:
+        """User-configured label for a scene, or the default "Scene N"."""
+        names: dict[str, str] = self.config_entry.options.get(CONF_SCENE_NAMES, {})
+        return names.get(str(scene)) or default_scene_name(scene)
+
+    # --------------------------------------------------------- scene recall
+
+    async def async_recall_scene(self, scene: int) -> None:
+        """Recall a scene on the device and track it for the current-scene sensor.
+
+        Both the scene button and the ``recall_scene`` service call this
+        (rather than the client directly) so scene tracking works regardless
+        of entry point. ``client.async_scene_recall`` awaits the device's
+        ``SWS`` echo, which -- by the time this call returns -- has already
+        been parsed and pushed through ``_async_handle_state`` above, so
+        ``self.data.routes`` here is the freshly recalled routing table.
+        """
+        await self.client.async_scene_recall(scene)
+        self._last_recalled_scene = scene
+        self._recalled_routes_snapshot = (
+            dict(self.data.routes) if self.data is not None else None
+        )
+
+    @property
+    def current_scene_name(self) -> str | None:
+        """Name of the last recalled scene, or None if none is tracked.
+
+        ``_async_check_scene_divergence`` clears the tracked scene as soon as
+        the routing no longer matches what the recall produced, so by the
+        time this is read it is already known to still match.
+        """
+        if self._last_recalled_scene is None:
+            return None
+        return self.scene_name(self._last_recalled_scene)
+
+    @callback
+    def _async_check_scene_divergence(self, state: MatrixState) -> None:
+        """Clear scene tracking once routing no longer matches the last recall.
+
+        The device exposes no way to read back scene *contents* -- only a
+        recall command -- so this integration can only ever claim "the
+        routing still matches what the last recalled scene produced", not
+        "the device currently has scene N active". Any routing change (from
+        this integration, the front panel, the IR remote, or a service call)
+        that differs from the snapshot taken right after the last recall
+        clears the tracked scene, and the current-scene sensor reports "none"
+        again until another scene is recalled.
+        """
+        if self._recalled_routes_snapshot is None:
+            return
+        if state.routes != self._recalled_routes_snapshot:
+            self._last_recalled_scene = None
+            self._recalled_routes_snapshot = None
+
     @callback
     def _async_device_id(self) -> str | None:
         """Return this entry's device registry id, if it already exists."""
@@ -151,6 +241,7 @@ class MTVikiCoordinator(DataUpdateCoordinator[MatrixState]):
         except MTVikiError as err:
             raise UpdateFailed(f"Error refreshing MT-VIKI matrix state: {err}") from err
         self._async_fire_route_change_events(state)
+        self._async_check_scene_divergence(state)
         return state
 
 

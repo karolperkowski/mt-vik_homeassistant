@@ -44,7 +44,18 @@ class MTVikiLocateButton(MTVikiEntity, ButtonEntity):
 
 
 class MTVikiSceneButton(MTVikiEntity, ButtonEntity):
-    """Recalls a stored routing scene."""
+    """Recalls a stored routing scene.
+
+    The button's name is the user-configured scene label (options flow
+    "Name your scenes" step), defaulting to "Scene N". It's set as a plain
+    ``_attr_name`` (which HA prefers over translation_key-derived names)
+    rather than a translated placeholder, so it's fixed for the entity's
+    lifetime; renaming a scene in options triggers a config-entry reload
+    (see the update listener in __init__.py), which recreates every entity
+    and picks the new name back up. ``translation_key`` is kept only so the
+    icons.json entry for "scene" still resolves -- icon lookup is
+    independent of the name override.
+    """
 
     _attr_translation_key = "scene"
 
@@ -53,13 +64,13 @@ class MTVikiSceneButton(MTVikiEntity, ButtonEntity):
         super().__init__(coordinator)
         self._scene = scene
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_scene_{scene}"
-        self._attr_translation_placeholders = {"scene_number": str(scene)}
+        self._attr_name = coordinator.scene_name(scene)
         # Scenes 9-16 exist but are disabled by default to avoid clutter.
         self._attr_entity_registry_enabled_default = scene <= SCENES_ENABLED_BY_DEFAULT
 
     async def async_press(self) -> None:
         """Recall the scene; routing updates arrive via the SWS echo."""
         await self._async_client_call(
-            self.coordinator.client.async_scene_recall(self._scene),
+            self.coordinator.async_recall_scene(self._scene),
             f"recall scene {self._scene}",
         )

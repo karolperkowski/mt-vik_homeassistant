@@ -8,6 +8,7 @@ from homeassistant.components.media_player import (
     MediaPlayerState,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import MTVikiConfigEntry, MTVikiCoordinator
@@ -46,9 +47,7 @@ class MTVikiOutputMediaPlayer(MTVikiEntity, MediaPlayerEntity):
             f"{coordinator.config_entry.entry_id}_output_{output}_player"
         )
         self._attr_translation_placeholders = {"output_number": str(output)}
-        self._attr_source_list = [
-            f"Input {input_port}" for input_port in range(1, coordinator.inputs + 1)
-        ]
+        self._attr_source_list = coordinator.input_names()
 
     @property
     def state(self) -> MediaPlayerState:
@@ -57,15 +56,17 @@ class MTVikiOutputMediaPlayer(MTVikiEntity, MediaPlayerEntity):
 
     @property
     def source(self) -> str | None:
-        """Return the input currently routed to this output."""
+        """Return the (named) input currently routed to this output."""
         route = self.coordinator.data.routes.get(self._output)
         if route is None or not 1 <= route <= self.coordinator.inputs:
             return None
-        return f"Input {route}"
+        return self.coordinator.input_name(route)
 
     async def async_select_source(self, source: str) -> None:
         """Route the selected input to this output."""
-        input_port = int(source.rsplit(" ", 1)[-1])
+        input_port = self.coordinator.input_port_for_name(source)
+        if input_port is None:
+            raise HomeAssistantError(f"Unknown source: {source}")
         await self._async_client_call(
             self.coordinator.client.async_switch(input_port, self._output),
             f"switch output {self._output} to input {input_port}",

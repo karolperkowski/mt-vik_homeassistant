@@ -13,6 +13,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `mtviki_matrix_route_changed` event fired on the HA bus for every output
   routing change, including front-panel/IR changes.
 - Release automation (tag-driven GitHub releases) and Dependabot updates.
+- User-configurable input names and scene names, set via two new options-flow
+  steps ("Name your inputs", "Name your scenes"). Names replace `Input N` in
+  the output `select` entities' options, the `media_player` source lists, and
+  the scene recall buttons' labels; renaming reloads the config entry so
+  every entity picks up the new labels.
+- **Current scene** sensor: reports the name of the last recalled scene while
+  the routing still matches what that recall produced, `none` otherwise. The
+  device exposes no way to read back scene contents or query which scene (if
+  any) is active, so this is honestly "last recalled and unchanged since",
+  not a real readback — see the README for the full caveat.
 
 ## [0.1.0] - 2026-08-23
 

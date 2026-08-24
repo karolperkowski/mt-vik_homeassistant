@@ -182,8 +182,10 @@ def _async_register_services(hass: HomeAssistant) -> None:
     async def async_recall_scene(call: ServiceCall) -> None:
         coordinator = _async_get_coordinator(hass, call)
         scene: int = call.data[ATTR_SCENE]
+        # Goes through the coordinator (not the client directly) so the
+        # current-scene sensor tracks recalls made via this service too.
         await _async_call_client(
-            coordinator.client.async_scene_recall(scene), f"recall scene {scene}"
+            coordinator.async_recall_scene(scene), f"recall scene {scene}"
         )
 
     async def async_set_output_hdcp(call: ServiceCall) -> None:

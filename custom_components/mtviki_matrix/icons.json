@@ -43,6 +43,9 @@
       "ip_mask": {
         "default": "mdi:ip-network-outline"
       },
+      "current_scene": {
+        "default": "mdi:palette-swatch-outline"
+      },
       "input_hdcp": {
         "default": "mdi:lock-question"
       }

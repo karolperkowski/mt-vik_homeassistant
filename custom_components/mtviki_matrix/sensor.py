@@ -60,6 +60,7 @@ async def async_setup_entry(
     entities: list[SensorEntity] = [
         MTVikiDiagnosticSensor(coordinator, description) for description in SENSORS
     ]
+    entities.append(MTVikiCurrentSceneSensor(coordinator))
     entities.extend(
         MTVikiInputHdcpSensor(coordinator, input_port)
         for input_port in range(1, coordinator.inputs + 1)
@@ -84,6 +85,37 @@ class MTVikiDiagnosticSensor(MTVikiEntity, SensorEntity):
     def native_value(self) -> str | None:
         """Return the sensor value."""
         return self.entity_description.value_fn(self.coordinator.data)
+
+
+class MTVikiCurrentSceneSensor(MTVikiEntity, SensorEntity):
+    """Name of the most recently recalled scene, if it's still in effect.
+
+    HONEST LIMITATION: the MT-VIKI protocol has no way to read back what a
+    scene *contains*, and no "current scene" query at all -- only a
+    fire-and-forget recall command (``SceneCall``). This sensor therefore
+    cannot report "the scene the device currently considers active"; it can
+    only report "the scene we last told the device to recall, as long as the
+    routing table has not changed since". The coordinator clears the tracked
+    scene (see ``_async_check_scene_divergence``) the moment routing diverges
+    from what that recall produced -- from this integration, the front
+    panel, the IR remote, or a service call -- at which point this sensor
+    falls back to "none". It also reads "none" before any scene has ever
+    been recalled through Home Assistant, even if the device happens to be
+    sitting in a state that matches one of its stored scenes; we simply have
+    no way to know that.
+    """
+
+    _attr_translation_key = "current_scene"
+
+    def __init__(self, coordinator: MTVikiCoordinator) -> None:
+        """Initialize the current-scene sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_current_scene"
+
+    @property
+    def native_value(self) -> str:
+        """Return the last-recalled scene's name, or "none"."""
+        return self.coordinator.current_scene_name or "none"
 
 
 class MTVikiInputHdcpSensor(MTVikiEntity, SensorEntity):

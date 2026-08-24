@@ -61,6 +61,15 @@
     "step": {
       "init": {
         "title": "MT-VIKI HDMI matrix options",
+        "description": "Choose what to configure.",
+        "menu_options": {
+          "polling": "Polling",
+          "input_names": "Name your inputs",
+          "scene_names": "Name your scenes"
+        }
+      },
+      "polling": {
+        "title": "Polling options",
         "data": {
           "enable_polling": "Enable polling",
           "poll_interval": "Poll interval"
@@ -68,6 +77,50 @@
         "data_description": {
           "enable_polling": "Periodically query routing, key lock, and beep state in addition to push updates.",
           "poll_interval": "Seconds between polls (minimum 10)."
+        }
+      },
+      "input_names": {
+        "title": "Name your inputs",
+        "description": "Give each input a friendly name. These names appear on the output selects, media players, and the routing services. Leave a field as-is to keep the default \"Input N\".",
+        "data": {
+          "input_1": "Input 1",
+          "input_2": "Input 2",
+          "input_3": "Input 3",
+          "input_4": "Input 4",
+          "input_5": "Input 5",
+          "input_6": "Input 6",
+          "input_7": "Input 7",
+          "input_8": "Input 8",
+          "input_9": "Input 9",
+          "input_10": "Input 10",
+          "input_11": "Input 11",
+          "input_12": "Input 12",
+          "input_13": "Input 13",
+          "input_14": "Input 14",
+          "input_15": "Input 15",
+          "input_16": "Input 16"
+        }
+      },
+      "scene_names": {
+        "title": "Name your scenes",
+        "description": "Give each of the device's 16 scene slots a friendly name. These names appear on the scene recall buttons and the current-scene sensor. Leave a field as-is to keep the default \"Scene N\".",
+        "data": {
+          "scene_1": "Scene 1",
+          "scene_2": "Scene 2",
+          "scene_3": "Scene 3",
+          "scene_4": "Scene 4",
+          "scene_5": "Scene 5",
+          "scene_6": "Scene 6",
+          "scene_7": "Scene 7",
+          "scene_8": "Scene 8",
+          "scene_9": "Scene 9",
+          "scene_10": "Scene 10",
+          "scene_11": "Scene 11",
+          "scene_12": "Scene 12",
+          "scene_13": "Scene 13",
+          "scene_14": "Scene 14",
+          "scene_15": "Scene 15",
+          "scene_16": "Scene 16"
         }
       }
     }
@@ -130,9 +183,6 @@
     "button": {
       "locate": {
         "name": "Locate"
-      },
-      "scene": {
-        "name": "Scene {scene_number}"
       }
     },
     "sensor": {
@@ -147,6 +197,9 @@
       },
       "ip_mask": {
         "name": "IP mask"
+      },
+      "current_scene": {
+        "name": "Current scene"
       },
       "input_hdcp": {
         "name": "Input {input_number} HDCP"

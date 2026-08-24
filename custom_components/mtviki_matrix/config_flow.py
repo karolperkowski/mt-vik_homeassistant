@@ -25,6 +25,7 @@ from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
+    TextSelector,
 )
 
 from .api import (
@@ -38,9 +39,11 @@ from .api import (
 from .const import (
     CONF_DEVICE,
     CONF_ENABLE_POLLING,
+    CONF_INPUT_NAMES,
     CONF_MATRIX_SIZE,
     CONF_NETWORK,
     CONF_POLL_INTERVAL,
+    CONF_SCENE_NAMES,
     DEFAULT_ENABLE_POLLING,
     DEFAULT_MATRIX_SIZE,
     DEFAULT_POLL_INTERVAL,
@@ -50,6 +53,9 @@ from .const import (
     MAX_POLL_INTERVAL,
     MAX_SCAN_HOSTS,
     MIN_POLL_INTERVAL,
+    SCENE_COUNT,
+    default_input_name,
+    default_scene_name,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -282,16 +288,45 @@ class MTVikiConfigFlow(ConfigFlow, domain=DOMAIN):
         return MTVikiOptionsFlow()
 
 
+def _input_name_key(port: int) -> str:
+    """Options-flow form field key for one input's name field."""
+    return f"input_{port}"
+
+
+def _scene_name_key(scene: int) -> str:
+    """Options-flow form field key for one scene's name field."""
+    return f"scene_{scene}"
+
+
 class MTVikiOptionsFlow(OptionsFlow):
-    """Handle the options flow (polling settings)."""
+    """Handle the options flow.
+
+    A menu (mirroring the config flow's manual/scan menu) fans out to three
+    independent leaf steps: polling settings, input names, and scene names.
+    Naming a 16x16 matrix's worth of inputs *and* all 16 scenes in one form
+    would be 32 text fields on one screen, so each category gets its own
+    step instead -- each one is self-contained and can be visited on its
+    own without disturbing the other options.
+    """
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage the options."""
+        """Show the options menu."""
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["polling", "input_names", "scene_names"],
+        )
+
+    async def async_step_polling(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage the polling options."""
         if user_input is not None:
             user_input[CONF_POLL_INTERVAL] = int(user_input[CONF_POLL_INTERVAL])
-            return self.async_create_entry(data=user_input)
+            return self.async_create_entry(
+                data={**self.config_entry.options, **user_input}
+            )
         options = self.config_entry.options
         schema = vol.Schema(
             {
@@ -313,4 +348,62 @@ class MTVikiOptionsFlow(OptionsFlow):
                 ),
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(step_id="polling", data_schema=schema)
+
+    async def async_step_input_names(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Name each input; count comes from the configured matrix size."""
+        inputs, _outputs = MATRIX_SIZES.get(
+            self.config_entry.data.get(CONF_MATRIX_SIZE, DEFAULT_MATRIX_SIZE),
+            MATRIX_SIZES[DEFAULT_MATRIX_SIZE],
+        )
+        stored: dict[str, str] = self.config_entry.options.get(CONF_INPUT_NAMES, {})
+        if user_input is not None:
+            names = {
+                str(port): (
+                    user_input.get(_input_name_key(port), "").strip()
+                    or default_input_name(port)
+                )
+                for port in range(1, inputs + 1)
+            }
+            return self.async_create_entry(
+                data={**self.config_entry.options, CONF_INPUT_NAMES: names}
+            )
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    _input_name_key(port),
+                    default=stored.get(str(port), default_input_name(port)),
+                ): TextSelector()
+                for port in range(1, inputs + 1)
+            }
+        )
+        return self.async_show_form(step_id="input_names", data_schema=schema)
+
+    async def async_step_scene_names(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Name each of the device's 16 scene slots."""
+        stored: dict[str, str] = self.config_entry.options.get(CONF_SCENE_NAMES, {})
+        if user_input is not None:
+            names = {
+                str(scene): (
+                    user_input.get(_scene_name_key(scene), "").strip()
+                    or default_scene_name(scene)
+                )
+                for scene in range(1, SCENE_COUNT + 1)
+            }
+            return self.async_create_entry(
+                data={**self.config_entry.options, CONF_SCENE_NAMES: names}
+            )
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    _scene_name_key(scene),
+                    default=stored.get(str(scene), default_scene_name(scene)),
+                ): TextSelector()
+                for scene in range(1, SCENE_COUNT + 1)
+            }
+        )
+        return self.async_show_form(step_id="scene_names", data_schema=schema)
