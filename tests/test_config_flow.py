@@ -25,7 +25,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
-from custom_components.mtviki_matrix.api import MTVikiConnectionError
+from custom_components.mtviki_matrix.api import DiscoveredMatrix, MTVikiConnectionError
 
 from .conftest import (
     DOMAIN,
@@ -38,6 +38,8 @@ from .conftest import (
 pytestmark = pytest.mark.asyncio
 
 CLIENT_PATH = f"custom_components.{DOMAIN}.config_flow.MTVikiClient"
+DISCOVER_PATH = f"custom_components.{DOMAIN}.config_flow.async_discover"
+GUESS_SUBNET_PATH = f"custom_components.{DOMAIN}.config_flow._guess_local_subnet"
 
 
 async def _start_flow(hass: HomeAssistant):
@@ -48,21 +50,54 @@ async def _start_flow(hass: HomeAssistant):
     return result
 
 
-# ======================================================================
-# user step
-# ======================================================================
-
-
-async def test_user_step_shows_form(hass: HomeAssistant) -> None:
+async def _start_manual_flow(hass: HomeAssistant):
+    """Start the flow and hop through the menu into the manual step."""
     result = await _start_flow(hass)
-    assert result["type"] is FlowResultType.FORM
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "manual"}
+    )
+    await hass.async_block_till_done()
+    return result
+
+
+# ======================================================================
+# user step (menu)
+# ======================================================================
+
+
+async def test_user_step_shows_menu(hass: HomeAssistant) -> None:
+    result = await _start_flow(hass)
+    assert result["type"] is FlowResultType.MENU
     assert result["step_id"] == "user"
+    assert set(result["menu_options"]) == {"manual", "scan"}
+
+
+async def test_user_step_menu_routes_to_manual(hass: HomeAssistant) -> None:
+    result = await _start_manual_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "manual"
     assert result["errors"] in ({}, None)
 
 
-async def test_user_step_schema_defaults(hass: HomeAssistant) -> None:
-    """Port defaults to 8080 and matrix size to 8x8 per the contract."""
+async def test_user_step_menu_routes_to_scan(hass: HomeAssistant) -> None:
     result = await _start_flow(hass)
+    with patch(GUESS_SUBNET_PATH, return_value="192.168.1.0/24"):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "scan"}
+        )
+        await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "scan"
+
+
+# ======================================================================
+# manual step
+# ======================================================================
+
+
+async def test_manual_step_schema_defaults(hass: HomeAssistant) -> None:
+    """Port defaults to 8080 and matrix size to 8x8 per the contract."""
+    result = await _start_manual_flow(hass)
     schema = result["data_schema"].schema
     keys = {str(key): key for key in schema}
     assert "host" in keys
@@ -72,10 +107,10 @@ async def test_user_step_schema_defaults(hass: HomeAssistant) -> None:
     assert keys["matrix_size"].default() == "8x8"
 
 
-async def test_user_step_creates_entry(
+async def test_manual_step_creates_entry(
     hass: HomeAssistant, mock_client, mock_setup_entry
 ) -> None:
-    result = await _start_flow(hass)
+    result = await _start_manual_flow(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], dict(MOCK_CONFIG)
     )
@@ -105,7 +140,7 @@ async def test_user_step_creates_entry(
 async def test_all_matrix_sizes_accepted(
     hass: HomeAssistant, mock_client, mock_setup_entry, size, expected
 ) -> None:
-    result = await _start_flow(hass)
+    result = await _start_manual_flow(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {**MOCK_CONFIG, "matrix_size": size}
     )
@@ -117,7 +152,7 @@ async def test_all_matrix_sizes_accepted(
 async def test_custom_port_is_stored_and_used_for_unique_id(
     hass: HomeAssistant, mock_client, mock_setup_entry
 ) -> None:
-    result = await _start_flow(hass)
+    result = await _start_manual_flow(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {**MOCK_CONFIG, "port": 5000}
     )
@@ -136,14 +171,14 @@ async def test_cannot_connect(hass: HomeAssistant, mock_setup_entry) -> None:
     client = build_mock_client()
     client.async_connect.side_effect = MTVikiConnectionError("boom")
     with patch(CLIENT_PATH, return_value=client):
-        result = await _start_flow(hass)
+        result = await _start_manual_flow(hass)
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], dict(MOCK_CONFIG)
         )
         await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "user"
+    assert result["step_id"] == "manual"
     assert result["errors"] == {"base": "cannot_connect"}
 
 
@@ -151,7 +186,7 @@ async def test_unknown_error(hass: HomeAssistant, mock_setup_entry) -> None:
     client = build_mock_client()
     client.async_connect.side_effect = RuntimeError("kaboom")
     with patch(CLIENT_PATH, return_value=client):
-        result = await _start_flow(hass)
+        result = await _start_manual_flow(hass)
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], dict(MOCK_CONFIG)
         )
@@ -166,7 +201,7 @@ async def test_recovers_after_error(hass: HomeAssistant, mock_setup_entry) -> No
     failing = build_mock_client()
     failing.async_connect.side_effect = MTVikiConnectionError("boom")
     with patch(CLIENT_PATH, return_value=failing):
-        result = await _start_flow(hass)
+        result = await _start_manual_flow(hass)
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], dict(MOCK_CONFIG)
         )
@@ -189,7 +224,7 @@ async def test_duplicate_host_port_aborts(
 ) -> None:
     mock_config_entry.add_to_hass(hass)
 
-    result = await _start_flow(hass)
+    result = await _start_manual_flow(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], dict(MOCK_CONFIG)
     )
@@ -204,13 +239,175 @@ async def test_same_host_different_port_is_not_a_duplicate(
 ) -> None:
     mock_config_entry.add_to_hass(hass)
 
-    result = await _start_flow(hass)
+    result = await _start_manual_flow(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {**MOCK_CONFIG, "port": 5000}
     )
     await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+# ======================================================================
+# scan / pick steps
+# ======================================================================
+
+
+def _discovered(
+    host=MOCK_HOST, port=MOCK_PORT, model="FHDM88LAMG", inputs=8, outputs=8
+):
+    return DiscoveredMatrix(
+        host=host, port=port, model=model, inputs=inputs, outputs=outputs
+    )
+
+
+async def _start_scan_flow(hass: HomeAssistant, *, subnet="192.168.1.0/24"):
+    result = await _start_flow(hass)
+    with patch(GUESS_SUBNET_PATH, return_value=subnet):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "scan"}
+        )
+        await hass.async_block_till_done()
+    return result
+
+
+async def test_scan_step_prefills_guessed_subnet(hass: HomeAssistant) -> None:
+    result = await _start_scan_flow(hass, subnet="10.20.30.0/24")
+    schema = result["data_schema"].schema
+    keys = {str(key): key for key in schema}
+    assert keys["network"].description == {"suggested_value": "10.20.30.0/24"}
+
+
+async def test_scan_step_invalid_network(hass: HomeAssistant) -> None:
+    result = await _start_scan_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"network": "not-a-network"}
+    )
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "scan"
+    assert result["errors"] == {"base": "invalid_network"}
+
+
+async def test_scan_step_network_too_large(hass: HomeAssistant) -> None:
+    result = await _start_scan_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"network": "10.0.0.0/16"}
+    )
+    await hass.async_block_till_done()
+    assert result["errors"] == {"base": "network_too_large"}
+
+
+async def test_scan_step_no_devices_found(hass: HomeAssistant) -> None:
+    result = await _start_scan_flow(hass)
+    with patch(DISCOVER_PATH, return_value=[]) as discover:
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"network": "192.168.1.0/24"}
+        )
+        await hass.async_block_till_done()
+    assert discover.await_count == 1
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "scan"
+    assert result["errors"] == {"base": "no_devices_found"}
+
+
+async def test_scan_step_finds_devices_and_shows_pick(hass: HomeAssistant) -> None:
+    result = await _start_scan_flow(hass)
+    device = _discovered()
+    with patch(DISCOVER_PATH, return_value=[device]):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"network": "192.168.1.0/24"}
+        )
+        await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "pick"
+    schema = result["data_schema"].schema
+    keys = {str(key): key for key in schema}
+    assert keys["device"].default() == f"{MOCK_HOST}:{MOCK_PORT}"
+    # discovered as an 8x8 -> matrix_size pre-filled to "8x8"
+    assert keys["matrix_size"].default() == "8x8"
+
+
+async def test_pick_step_creates_entry(
+    hass: HomeAssistant, mock_client, mock_setup_entry
+) -> None:
+    result = await _start_scan_flow(hass)
+    device = _discovered()
+    with patch(DISCOVER_PATH, return_value=[device]):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"network": "192.168.1.0/24"}
+        )
+        await hass.async_block_till_done()
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {"device": f"{MOCK_HOST}:{MOCK_PORT}", "matrix_size": "8x8"},
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == MOCK_CONFIG
+    assert result["result"].unique_id == f"{MOCK_HOST}:{MOCK_PORT}"
+
+
+async def test_pick_step_prefills_size_when_undetermined(
+    hass: HomeAssistant,
+) -> None:
+    result = await _start_scan_flow(hass)
+    device = _discovered(model=None, inputs=None, outputs=None)
+    with patch(DISCOVER_PATH, return_value=[device]):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"network": "192.168.1.0/24"}
+        )
+        await hass.async_block_till_done()
+    schema = result["data_schema"].schema
+    keys = {str(key): key for key in schema}
+    assert keys["matrix_size"].default() == "8x8"
+
+
+async def test_pick_step_duplicate_aborts(
+    hass: HomeAssistant, mock_client, mock_setup_entry, mock_config_entry
+) -> None:
+    mock_config_entry.add_to_hass(hass)
+    result = await _start_scan_flow(hass)
+    device = _discovered()
+    with patch(DISCOVER_PATH, return_value=[device]):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"network": "192.168.1.0/24"}
+        )
+        await hass.async_block_till_done()
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {"device": f"{MOCK_HOST}:{MOCK_PORT}", "matrix_size": "8x8"},
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_pick_step_cannot_connect(hass: HomeAssistant, mock_setup_entry) -> None:
+    result = await _start_scan_flow(hass)
+    device = _discovered()
+    with patch(DISCOVER_PATH, return_value=[device]):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"network": "192.168.1.0/24"}
+        )
+        await hass.async_block_till_done()
+
+    failing = build_mock_client()
+    failing.async_connect.side_effect = MTVikiConnectionError("boom")
+    with patch(CLIENT_PATH, return_value=failing):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {"device": f"{MOCK_HOST}:{MOCK_PORT}", "matrix_size": "8x8"},
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "pick"
+    assert result["errors"] == {"base": "cannot_connect"}
 
 
 # ======================================================================

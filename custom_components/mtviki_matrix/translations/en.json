@@ -2,6 +2,14 @@
   "config": {
     "step": {
       "user": {
+        "title": "Add your MT-VIKI HDMI matrix",
+        "description": "Choose how to add your matrix.",
+        "menu_options": {
+          "manual": "Enter host and port manually",
+          "scan": "Scan the local network"
+        }
+      },
+      "manual": {
         "title": "Connect to your MT-VIKI HDMI matrix",
         "description": "Set up a MT-VIKI HDMI matrix switcher over TCP (tested with the MT-HD0808).",
         "data": {
@@ -14,11 +22,36 @@
           "port": "TCP control port of the matrix (default 8080).",
           "matrix_size": "Number of inputs and outputs of your model."
         }
+      },
+      "scan": {
+        "title": "Scan the local network",
+        "description": "Probes every host in the given network for a matrix listening on TCP port 8080. This is opt-in and only scans the subnet you specify — no passive discovery is performed.",
+        "data": {
+          "network": "Network (CIDR)"
+        },
+        "data_description": {
+          "network": "The subnet to scan, e.g. 192.168.1.0/24. Pre-filled with a best-effort guess of your local /24."
+        }
+      },
+      "pick": {
+        "title": "Choose a device",
+        "description": "Select one of the matrices found by the scan, and confirm its matrix size.",
+        "data": {
+          "device": "Discovered device",
+          "matrix_size": "Matrix size"
+        },
+        "data_description": {
+          "device": "host:port, the model reported by the device (if any), and its size where known.",
+          "matrix_size": "Number of inputs and outputs of your model. Pre-filled from the scan when it could be determined."
+        }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect",
-      "unknown": "Unexpected error"
+      "unknown": "Unexpected error",
+      "invalid_network": "Not a valid network in CIDR notation",
+      "network_too_large": "Network is too large to scan (maximum 1024 hosts)",
+      "no_devices_found": "No MT-VIKI matrices found on that network"
     },
     "abort": {
       "already_configured": "Device is already configured"

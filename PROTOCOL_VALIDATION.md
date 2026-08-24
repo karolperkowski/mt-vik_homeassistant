@@ -436,3 +436,33 @@ the interesting excerpts:
 
 ```
 ```
+
+---
+
+## 13. Passive-discovery groundwork (MAC / OUI / DHCP / UDP broadcast)
+
+The integration currently ships only an **opt-in** TCP network scan (see the
+README's "Discovery" section) — it never listens for anything on its own,
+and there is no mDNS/SSDP/DHCP-based autodiscovery. This section exists
+purely to record the raw facts a future *passive* discovery mechanism would
+need; filling it in does not imply one gets implemented immediately, and
+none of it blocks anything above.
+
+| # | Item | How to get it | Value |
+| --- | --- | --- | --- |
+| 13.1 | MAC address of the unit | Router/AP client list, or `arp -a <ip>` after pinging it | |
+| 13.2 | MAC OUI (first 3 octets) | Looked up from 13.1 against an OUI database | |
+| 13.3 | Does the OUI resolve to a recognisable vendor (MT-VIKI or an OEM/ODM)? | | ☐ yes ☐ no — vendor: |
+| 13.4 | DHCP hostname the unit requests (if any) | Router's DHCP lease table / `dhcp-lease-list` | |
+| 13.5 | DHCP vendor class identifier (option 60), if visible | Packet capture on the DHCP exchange, or router UI | |
+| 13.6 | mDNS/SSDP traffic observed from the unit | `avahi-browse -a` / a packet capture for a minute after power-on | ☐ none seen ☐ something — details: |
+| 13.7 | Does the unit answer a UDP broadcast on port **4000**? | Sibling MT-VIKI SKUs (a different product line) reportedly use UDP 4000 for a scan/config protocol; send a broadcast probe and note whether this unit replies at all, even with garbage | ☐ yes — reply: ☐ no ☐ untested |
+| 13.8 | Any other UDP port that answers a broadcast (sanity-sweep 1990, 4001, and other common device-discovery ports) | | |
+
+**Verdict / next steps:**
+
+| Outcome | Meaning | Action |
+| --- | --- | --- |
+| OUI is a real, stable MT-VIKI (or consistent OEM) identifier | A MAC-OUI allow-list could gate a future zeroconf/DHCP-watcher discovery flow | Record the OUI(s) here and open a follow-up issue |
+| Unit answers UDP 4000 (or any other broadcast) meaningfully | A UDP broadcast probe could become a real passive (or at least push-based) discovery mechanism, augmenting the current opt-in TCP subnet scan | Record the exact request/response bytes; a follow-up implementation would live in `api.py` as a second discovery primitive, gated the same way (opt-in, never automatic) |
+| Nothing above yields anything usable | Passive discovery stays out of scope; the opt-in TCP scan remains the only discovery mechanism | Note that conclusion here so nobody re-investigates from scratch |

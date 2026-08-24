@@ -18,10 +18,12 @@ import pytest
 
 from custom_components.mtviki_matrix.api import (
     MATRIX_SIZES,
+    DiscoveredMatrix,
     MatrixState,
     MTVikiClient,
     MTVikiConnectionError,
     MTVikiError,
+    async_discover,
 )
 
 from .mock_matrix import MockMatrix
@@ -731,3 +733,129 @@ async def test_recent_traffic_ring_buffer():
             assert len(client.recent_traffic()) <= 200
         finally:
             await client.stop()
+
+
+# ======================================================================
+# opt-in network-scan discovery (async_discover / DiscoveredMatrix)
+# ======================================================================
+
+
+async def test_async_discover_finds_a_real_matrix():
+    """A live MockMatrix on 127.0.0.1 must be discovered with the right shape."""
+    async with MockMatrix(inputs=8, outputs=8) as mock:
+        results = await async_discover(
+            [mock.host], mock.port, connect_timeout=1.0, reply_window=1.0
+        )
+    assert len(results) == 1
+    device = results[0]
+    assert isinstance(device, DiscoveredMatrix)
+    assert device.host == mock.host
+    assert device.port == mock.port
+    assert device.model == mock.model  # "FHDM88LAMG"
+    assert device.outputs == 8  # measured from the real SWS reply
+    assert device.inputs == 8  # derived from the model string
+
+
+async def test_async_discover_16x16_derives_inputs_from_model():
+    async with MockMatrix(inputs=16, outputs=16) as mock:
+        results = await async_discover(
+            [mock.host], mock.port, connect_timeout=1.0, reply_window=1.0
+        )
+    assert len(results) == 1
+    device = results[0]
+    assert device.model == "FHDM1616LAMG"
+    assert device.outputs == 16
+    assert device.inputs == 16
+
+
+async def test_async_discover_no_listener_is_not_discovered():
+    """A closed port must fail cleanly, not raise, and not be discovered."""
+    mock = MockMatrix()
+    await mock.start()
+    dead_port = mock.port
+    await mock.stop()
+    await asyncio.sleep(0.05)
+
+    results = await async_discover(
+        ["127.0.0.1"], dead_port, connect_timeout=0.5, reply_window=0.5
+    )
+    assert results == []
+
+
+async def test_async_discover_garbage_reply_without_sws_is_not_discovered():
+    """A listener that answers but never sends a well-formed SWS must not count."""
+
+    async def _garbage_handler(reader, writer):
+        with contextlib.suppress(Exception):
+            await reader.read(4096)
+        with contextlib.suppress(OSError):
+            writer.write(b"NOT_A_MATRIX_REPLY\r\n")
+            await writer.drain()
+        with contextlib.suppress(Exception):
+            writer.close()
+            await writer.wait_closed()
+
+    server = await asyncio.start_server(_garbage_handler, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    try:
+        results = await async_discover(
+            ["127.0.0.1"], port, connect_timeout=0.5, reply_window=0.5
+        )
+    finally:
+        server.close()
+        await server.wait_closed()
+    assert results == []
+
+
+async def test_async_discover_ping_reply_alone_is_too_weak():
+    """A device that answers PING but silently ignores GetSW must not be discovered."""
+    async with MockMatrix(unsupported=["GetSW"]) as mock:
+        results = await async_discover(
+            [mock.host], mock.port, connect_timeout=1.0, reply_window=0.6
+        )
+    assert results == []
+
+
+async def test_async_discover_inputs_none_when_model_is_ambiguous():
+    """An odd-length digit run after FHDM can't be split -- inputs stays None."""
+    async with MockMatrix(model="FHDM123FOO") as mock:
+        results = await async_discover(
+            [mock.host], mock.port, connect_timeout=1.0, reply_window=1.0
+        )
+    assert len(results) == 1
+    device = results[0]
+    assert device.model == "FHDM123FOO"
+    assert device.inputs is None
+    # outputs is always measured from the real SWS reply, independent of the
+    # (here deliberately mismatched) fake model string.
+    assert device.outputs == 8
+
+
+async def test_async_discover_inputs_none_when_model_has_no_digits():
+    async with MockMatrix(model="NOTAMODEL") as mock:
+        results = await async_discover(
+            [mock.host], mock.port, connect_timeout=1.0, reply_window=1.0
+        )
+    assert len(results) == 1
+    assert results[0].inputs is None
+
+
+async def test_async_discover_results_sorted_by_host():
+    async with MockMatrix() as mock:
+        results = await async_discover(
+            ["127.0.0.1", "127.0.0.1"], mock.port, connect_timeout=1.0
+        )
+    assert [d.host for d in results] == sorted(d.host for d in results)
+
+
+async def test_async_discover_never_raises_on_a_mixed_batch():
+    """One bad host in the batch must not affect discovery of a good one."""
+    async with MockMatrix() as mock:
+        results = await async_discover(
+            ["127.0.0.1", "192.0.2.1"],  # 192.0.2.0/24 is TEST-NET-1 (unroutable)
+            mock.port,
+            connect_timeout=0.3,
+            reply_window=0.5,
+        )
+    assert len(results) == 1
+    assert results[0].host == "127.0.0.1"

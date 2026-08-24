@@ -21,6 +21,7 @@ from .const import (
     DEFAULT_MODEL,
     DEFAULT_POLL_INTERVAL,
     DOMAIN,
+    EVENT_ROUTE_CHANGED,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -63,6 +64,10 @@ class MTVikiCoordinator(DataUpdateCoordinator[MatrixState]):
             MATRIX_SIZES[DEFAULT_MATRIX_SIZE],
         )
         self._device_meta: tuple[str | None, str | None] | None = None
+        # Last known output->input mapping, used to diff incoming states for
+        # EVENT_ROUTE_CHANGED. None until the first MatrixState is seen at all
+        # (that first state is a baseline sync and must not fire events).
+        self._last_routes: dict[int, int] | None = None
         # The api client fires this callback from within the event loop, so we
         # can hand the state straight to the coordinator without job scheduling.
         client.set_state_callback(self._async_handle_state)
@@ -71,7 +76,55 @@ class MTVikiCoordinator(DataUpdateCoordinator[MatrixState]):
     def _async_handle_state(self, state: MatrixState) -> None:
         """Handle a pushed state snapshot from the client (event loop only)."""
         self.async_set_updated_data(state)
+        self._async_fire_route_change_events(state)
         self._async_update_device_registry(state)
+
+    @callback
+    def _async_fire_route_change_events(self, state: MatrixState) -> None:
+        """Fire EVENT_ROUTE_CHANGED on the HA bus for each changed output.
+
+        Compares ``state.routes`` against the last routes seen (from either
+        the push or the polling path) and fires one event per output whose
+        routed input differs. The very first MatrixState ever observed is a
+        baseline sync -- there is nothing to diff against yet -- so it never
+        produces events, and neither does a state that changed nothing. A
+        reconnect resync that reveals a route which changed while
+        disconnected does fire, with ``old_input`` set to the last routes we
+        knew about before the disconnect.
+        """
+        new_routes = state.routes
+        old_routes = self._last_routes
+        self._last_routes = dict(new_routes)
+        if old_routes is None:
+            return
+        changed = {
+            output: new_input
+            for output, new_input in new_routes.items()
+            if old_routes.get(output) != new_input
+        }
+        if not changed:
+            return
+        # One device-registry lookup per state update (not per event) keeps
+        # this cheap; it's a plain identifiers-index dict lookup.
+        device_id = self._async_device_id()
+        for output, new_input in changed.items():
+            data: dict[str, str | int | None] = {
+                "entry_id": self.config_entry.entry_id,
+                "output": output,
+                "old_input": old_routes.get(output),
+                "new_input": new_input,
+            }
+            if device_id is not None:
+                data["device_id"] = device_id
+            self.hass.bus.async_fire(EVENT_ROUTE_CHANGED, data)
+
+    @callback
+    def _async_device_id(self) -> str | None:
+        """Return this entry's device registry id, if it already exists."""
+        device = dr.async_get(self.hass).async_get_device(
+            identifiers={(DOMAIN, self.config_entry.entry_id)}
+        )
+        return device.id if device is not None else None
 
     @callback
     def _async_update_device_registry(self, state: MatrixState) -> None:
@@ -94,9 +147,11 @@ class MTVikiCoordinator(DataUpdateCoordinator[MatrixState]):
     async def _async_update_data(self) -> MatrixState:
         """Poll the device (only used when polling is enabled in options)."""
         try:
-            return await self.client.async_refresh()
+            state = await self.client.async_refresh()
         except MTVikiError as err:
             raise UpdateFailed(f"Error refreshing MT-VIKI matrix state: {err}") from err
+        self._async_fire_route_change_events(state)
+        return state
 
 
 type MTVikiConfigEntry = ConfigEntry[MTVikiCoordinator]

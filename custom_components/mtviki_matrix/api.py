@@ -65,6 +65,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 from collections import deque
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
@@ -73,10 +74,12 @@ from typing import Final
 
 __all__ = [
     "MATRIX_SIZES",
+    "DiscoveredMatrix",
     "MTVikiClient",
     "MTVikiConnectionError",
     "MTVikiError",
     "MatrixState",
+    "async_discover",
 ]
 
 _LOGGER = logging.getLogger(__name__)
@@ -952,3 +955,171 @@ class MTVikiClient:
     def _validate_scene(self, scene: int) -> None:
         if not SCENE_MIN <= scene <= SCENE_MAX:
             raise MTVikiError(f"scene {scene} out of range {SCENE_MIN}-{SCENE_MAX}")
+
+
+# ---------------------------------------------------------------------------
+# Opt-in network-scan discovery
+# ---------------------------------------------------------------------------
+#
+# This is a best-effort fingerprint used only to pre-fill the config flow's
+# "scan network" step -- it is never run automatically, and it is a separate,
+# lightweight, one-shot probe rather than a full :class:`MTVikiClient`. A host
+# only counts as *discovered* when it answers ``GetSW`` with a well-formed
+# ``SWS`` line; a ``PING`` reply alone is far too weak a signal (almost
+# anything that accepts a TCP connection and echoes a line could be mistaken
+# for a matrix), so ``PING`` is only ever used to enrich a *confirmed* hit
+# with a model string.
+
+#: Matches a well-formed ``SWS`` reply: the keyword followed by one or more
+#: whitespace-separated integers, and nothing else.
+_SWS_RE: Final = re.compile(r"^SWS(?:\s+\d+)+$")
+
+#: Model literals observed so far look like ``FHDM<in><out><suffix>``, e.g.
+#: ``FHDM88LAMG`` (8x8) or ``FHDM1616LAMG`` (16x16).
+_MODEL_DIGITS_RE: Final = re.compile(r"FHDM(\d+)", re.IGNORECASE)
+
+#: Default probe port for :func:`async_discover` (same as the protocol default).
+DISCOVERY_DEFAULT_PORT: Final = DEFAULT_PORT
+
+
+@dataclass
+class DiscoveredMatrix:
+    """One host that answered a discovery probe with a valid ``SWS`` reply."""
+
+    host: str
+    port: int
+    #: Bare model literal from the ``PING`` reply, if any was seen.
+    model: str | None
+    #: Derived from the model string; ``None`` when it cannot be parsed
+    #: conservatively (see :func:`_derive_inputs_from_model`).
+    inputs: int | None
+    #: The actual field count of the device's own ``SWS`` reply --
+    #: authoritative, never guessed.
+    outputs: int | None
+
+
+def _derive_inputs_from_model(model: str | None) -> int | None:
+    """Best-effort, conservative input count from a ``PING`` model literal.
+
+    Only ever trusts an even-length digit run immediately after ``FHDM`` that
+    splits cleanly in half, e.g. ``88`` -> 8x8, ``1616`` -> 16x16, ``44`` ->
+    4x4, ``42`` -> 4x2 (the reported *inputs* half). Anything else -- no
+    digits, an odd-length run that cannot be split evenly, or a non-numeric
+    half -- yields ``None`` rather than a guess: this is only ever used to
+    pre-fill a form field the user can still override.
+    """
+    if not model:
+        return None
+    match = _MODEL_DIGITS_RE.search(model)
+    if not match:
+        return None
+    digits = match.group(1)
+    if len(digits) % 2 != 0:
+        return None
+    half = len(digits) // 2
+    try:
+        return int(digits[:half])
+    except ValueError:
+        return None
+
+
+async def _discover_one(
+    host: str, port: int, connect_timeout: float, reply_window: float
+) -> DiscoveredMatrix | None:
+    """Probe a single host.
+
+    Never raises: any failure (refused connection, timeout, garbled reply,
+    ...) is swallowed and reported as "not discovered" (``None``).
+    """
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port), connect_timeout
+        )
+    except Exception:  # noqa: BLE001 - a probe must never raise per-host
+        return None
+
+    model: str | None = None
+    outputs: int | None = None
+    try:
+        try:
+            writer.write(b"PING\r\n")
+            writer.write(b"GetSW\r\n")
+            await writer.drain()
+        except (OSError, RuntimeError):
+            return None
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + reply_window
+        buffer = bytearray()
+        while outputs is None:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            try:
+                chunk = await asyncio.wait_for(reader.read(4096), remaining)
+            except TimeoutError:
+                break
+            if not chunk:
+                break
+            buffer.extend(chunk)
+            while b"\n" in buffer:
+                idx = buffer.index(b"\n")
+                raw = bytes(buffer[:idx])
+                del buffer[: idx + 1]
+                line = raw.decode("ascii", errors="replace").strip("\r").strip()
+                if not line:
+                    continue
+                if _SWS_RE.match(line):
+                    outputs = len(line.split()) - 1
+                    break
+                if model is None and len(line.split()) == 1:
+                    model = line
+    except Exception:  # noqa: BLE001 - defensive: a probe must never raise
+        return None
+    finally:
+        with contextlib.suppress(OSError, RuntimeError):
+            writer.close()
+        with contextlib.suppress(Exception):
+            await writer.wait_closed()
+
+    if outputs is None:
+        # A PING reply alone (or nothing at all) is too weak a signal.
+        return None
+    return DiscoveredMatrix(
+        host=host,
+        port=port,
+        model=model,
+        inputs=_derive_inputs_from_model(model),
+        outputs=outputs,
+    )
+
+
+async def async_discover(
+    hosts: Iterable[str],
+    port: int = DISCOVERY_DEFAULT_PORT,
+    *,
+    connect_timeout: float = 0.7,
+    reply_window: float = 1.0,
+    concurrency: int = 100,
+) -> list[DiscoveredMatrix]:
+    """Concurrently probe ``hosts`` for an MT-VIKI matrix listening on ``port``.
+
+    Opt-in only: this function is never called automatically, it exists to
+    back the config flow's "scan network" step. Each host gets its own TCP
+    connection attempt, a ``PING`` + ``GetSW`` probe, and up to
+    ``reply_window`` seconds to answer; concurrency is bounded by a semaphore
+    so a large subnet cannot open hundreds of sockets at once. Failure of any
+    kind for a single host never aborts the scan. Only hosts that answered
+    with a well-formed ``SWS`` line are returned, sorted by host.
+    """
+    host_list = list(hosts)
+    semaphore = asyncio.Semaphore(max(1, concurrency))
+
+    async def _bounded(host: str) -> DiscoveredMatrix | None:
+        async with semaphore:
+            return await _discover_one(host, port, connect_timeout, reply_window)
+
+    results = await asyncio.gather(*(_bounded(host) for host in host_list))
+    discovered = [result for result in results if result is not None]
+    discovered.sort(key=lambda d: d.host)
+    return discovered

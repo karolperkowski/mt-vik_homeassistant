@@ -68,3 +68,13 @@ ATTR_COUNT = "count"
 ATTR_INTERVAL = "interval"
 
 ALL_OUTPUTS = "all"
+
+# Event fired on the HA bus when an output's routed input changes (see coordinator.py).
+EVENT_ROUTE_CHANGED = "mtviki_matrix_route_changed"
+
+# Opt-in network-scan discovery (config flow only; never runs automatically).
+CONF_NETWORK = "network"
+CONF_DEVICE = "device"
+DEFAULT_SCAN_NETWORK = "192.168.1.0/24"
+# Upper bound on how many hosts a single scan may probe (see api.async_discover).
+MAX_SCAN_HOSTS = 1024

@@ -81,6 +81,22 @@ Setup makes a single connection attempt and asks the device for its routing
 table; if that fails you get `cannot_connect` and nothing is created. The entry
 is uniquely identified by `host:port`, so the same matrix cannot be added twice.
 
+### Discovery
+
+There is **no passive autodiscovery** — the integration never listens for or
+reacts to anything on its own. No mDNS/SSDP announcement has ever been
+observed from these units, and the DHCP fingerprint (vendor class, MAC OUI)
+is unknown; see [`PROTOCOL_VALIDATION.md`](PROTOCOL_VALIDATION.md) for what
+still needs recording from real hardware before either could be wired up.
+
+What the config flow *does* offer, entirely **opt-in**, is a network scan:
+choose **Scan the local network** on the first setup screen instead of
+**Enter host and port manually**, confirm or edit the pre-filled subnet (a
+best-effort guess of your local /24, always editable), and the integration
+TCP-probes every host in that subnet on port 8080 for a matrix. Nothing is
+sent anywhere outside the subnet you specify, no scan ever starts by itself,
+and the probe is capped at 1024 hosts per scan.
+
 ### Options
 
 **Settings → Devices & Services → MT-VIKI HDMI Matrix → Configure**
@@ -249,6 +265,32 @@ automation:
 ```
 
 ---
+
+## Events
+
+The integration fires `mtviki_matrix_route_changed` on the Home Assistant event
+bus whenever an output's routed input changes — including changes made from the
+front panel or IR remote (delivered via the device's unsolicited push updates).
+Event data: `entry_id`, `output` (int), `old_input` (int, or `null` if not
+previously known), `new_input` (int), and `device_id` (when registered).
+
+```yaml
+automation:
+  - alias: "Notify on HDMI matrix route change"
+    trigger:
+      - platform: event
+        event_type: mtviki_matrix_route_changed
+    condition:
+      - condition: template
+        value_template: "{{ trigger.event.data.output == 1 }}"
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          message: >-
+            Output {{ trigger.event.data.output }} switched from
+            input {{ trigger.event.data.old_input }} to
+            input {{ trigger.event.data.new_input }}.
+```
 
 ## Lovelace example
 
