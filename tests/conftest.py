@@ -45,7 +45,7 @@ if not HAS_PYTEST_SOCKET:
     # opt back in with `pytest.mark.usefixtures("socket_enabled")`; when the
     # plugin is absent that marker still has to resolve, hence this no-op.
     @pytest.fixture
-    def socket_enabled():  # noqa: D103
+    def socket_enabled():
         yield
 
 

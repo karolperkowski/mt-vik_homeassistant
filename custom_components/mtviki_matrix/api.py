@@ -267,7 +267,7 @@ class MTVikiClient:
         self._notify()
 
     def _log_traffic(self, direction: str, text: str) -> None:
-        stamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        stamp = datetime.now().astimezone().strftime("%H:%M:%S.%f")[:-3]
         arrow = {"TX": ">>>", "RX": "<<<"}.get(direction, "---")
         self._traffic.append(f"{stamp} {direction} {arrow} {text}")
 
@@ -361,19 +361,23 @@ class MTVikiClient:
     async def _open(self) -> None:
         """Open the TCP socket and start the reader task."""
         await self._close()
-        _LOGGER.debug("MT-VIKI %s: connecting (timeout %.1fs)", self.target, self.timeout)
+        _LOGGER.debug(
+            "MT-VIKI %s: connecting (timeout %.1fs)", self.target, self.timeout
+        )
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(self.host, self.port), self.timeout
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise MTVikiConnectionError(
                 f"timed out after {self.timeout}s connecting to {self.target}"
             ) from exc
         except ConnectionRefusedError as exc:
             raise MTVikiConnectionError(f"connection refused by {self.target}") from exc
         except OSError as exc:
-            raise MTVikiConnectionError(f"cannot connect to {self.target}: {exc}") from exc
+            raise MTVikiConnectionError(
+                f"cannot connect to {self.target}: {exc}"
+            ) from exc
 
         self._reader = reader
         self._writer = writer
@@ -419,7 +423,9 @@ class MTVikiClient:
             del self._buffer[: idx + 1]
             lines.append(raw.decode("ascii", errors="replace").rstrip("\r"))
         if final and self._buffer:
-            lines.append(bytes(self._buffer).decode("ascii", errors="replace").rstrip("\r"))
+            lines.append(
+                bytes(self._buffer).decode("ascii", errors="replace").rstrip("\r")
+            )
             self._buffer.clear()
         return lines
 
@@ -508,9 +514,7 @@ class MTVikiClient:
         elif keyword in ("EDIDData", "SetEDIDData", "SceneSaveOK"):
             _LOGGER.debug("MT-VIKI %s: ack: %s", self.target, line)
         elif (
-            self._awaiting_ping
-            and len(tokens) == 1
-            and keyword not in _KNOWN_KEYWORDS
+            self._awaiting_ping and len(tokens) == 1 and keyword not in _KNOWN_KEYWORDS
         ):
             # PING answers with a bare model literal (e.g. FHDM88LAMG) which is
             # model specific -- never match on the literal, only on the context.
@@ -554,7 +558,9 @@ class MTVikiClient:
         unit works unchanged.
         """
         if not args:
-            _LOGGER.warning("MT-VIKI %s: %s line has no values: %r", self.target, what, line)
+            _LOGGER.warning(
+                "MT-VIKI %s: %s line has no values: %r", self.target, what, line
+            )
             return
         for index, token in enumerate(args, start=1):
             try:
@@ -596,7 +602,9 @@ class MTVikiClient:
             await writer.drain()
         except (OSError, RuntimeError) as exc:
             self._set_connected(False)
-            raise MTVikiConnectionError(f"write failed on {self.target}: {exc}") from exc
+            raise MTVikiConnectionError(
+                f"write failed on {self.target}: {exc}"
+            ) from exc
 
     async def _request(
         self,
@@ -642,7 +650,7 @@ class MTVikiClient:
                 while True:
                     try:
                         item = await asyncio.wait_for(self._resp_queue.get(), budget)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         break
                     if item is _CONN_LOST:
                         raise MTVikiConnectionError(
@@ -752,23 +760,33 @@ class MTVikiClient:
         await self._request("GetIPMask", expect=("IPMask",), timeout=PROBE_TIMEOUT)
 
     async def _async_get_input_hdcp(self) -> None:
-        await self._request("GetInPortHDCP", expect=("InPortHDCPS",), timeout=PROBE_TIMEOUT)
+        await self._request(
+            "GetInPortHDCP", expect=("InPortHDCPS",), timeout=PROBE_TIMEOUT
+        )
 
     async def _async_get_output_hdcp(self) -> None:
-        await self._request("GetOutPortHDCP", expect=("OutPortHDCPS",), timeout=PROBE_TIMEOUT)
+        await self._request(
+            "GetOutPortHDCP", expect=("OutPortHDCPS",), timeout=PROBE_TIMEOUT
+        )
 
     async def _async_get_title(self) -> None:
-        await self._request("GetTitleLable", expect=("TitleLable",), timeout=PROBE_TIMEOUT)
+        await self._request(
+            "GetTitleLable", expect=("TitleLable",), timeout=PROBE_TIMEOUT
+        )
 
     async def _async_get_service_type(self) -> None:
-        await self._request("GetServiceType", expect=("ServiceType",), timeout=PROBE_TIMEOUT)
+        await self._request(
+            "GetServiceType", expect=("ServiceType",), timeout=PROBE_TIMEOUT
+        )
 
     async def _async_get_service_num(self) -> None:
-        await self._request("GetServiceNum", expect=("ServiceNum",), timeout=PROBE_TIMEOUT)
+        await self._request(
+            "GetServiceNum", expect=("ServiceNum",), timeout=PROBE_TIMEOUT
+        )
 
     # ------------------------------------------------------------- commands
 
-    async def async_switch(self, input: int, outputs: int | list[int]) -> None:  # noqa: A002
+    async def async_switch(self, input: int, outputs: int | list[int]) -> None:
         """Route ``input`` to one or more ``outputs`` (all 1-based).
 
         Sends ``SW <in> <out1> [out2 ...]`` and waits for the ``SWS`` echo,
@@ -783,14 +801,16 @@ class MTVikiClient:
         command = " ".join(["SW", str(input), *(str(o) for o in targets)])
         await self._request(command, expect=("SWS",), required=True)
 
-    async def async_switch_all(self, input: int) -> None:  # noqa: A002
+    async def async_switch_all(self, input: int) -> None:
         """Route ``input`` to every output: ``SW <in> 1 2 ... N``."""
         await self.async_switch(input, list(range(1, self.outputs + 1)))
 
     async def async_scene_save(self, scene: int) -> None:
         """``SceneSave <n>`` -> ``SceneSaveOK``."""
         self._validate_scene(scene)
-        await self._request(f"SceneSave {scene}", expect=("SceneSaveOK",), required=True)
+        await self._request(
+            f"SceneSave {scene}", expect=("SceneSaveOK",), required=True
+        )
 
     async def async_scene_recall(self, scene: int) -> None:
         """``SceneCall <n>`` -> ``SWS ...`` (the recall self-syncs the routes)."""
@@ -862,7 +882,7 @@ class MTVikiClient:
             timeout=PROBE_TIMEOUT,
         )
 
-    async def async_set_input_edid(self, input: int, edid: int) -> None:  # noqa: A002
+    async def async_set_input_edid(self, input: int, edid: int) -> None:
         """``SetEDID <in> <sel>`` (UNVERIFIED -- valid ``sel`` values unknown)."""
         self._validate_port(input, self.inputs, "input")
         if not 1 <= edid <= 16:

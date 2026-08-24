@@ -78,9 +78,7 @@ class MTVikiDiagnosticSensor(MTVikiEntity, SensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self.entity_description = description
-        self._attr_unique_id = (
-            f"{coordinator.config_entry.entry_id}_{description.key}"
-        )
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{description.key}"
 
     @property
     def native_value(self) -> str | None:

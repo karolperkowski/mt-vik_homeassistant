@@ -9,6 +9,7 @@ stand-in before any api.py assertions are trusted.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 import pytest
 
@@ -69,10 +70,8 @@ class RawClient:
     async def close(self) -> None:
         if self.writer is not None:
             self.writer.close()
-            try:
+            with contextlib.suppress(ConnectionResetError, BrokenPipeError):
                 await self.writer.wait_closed()
-            except (ConnectionResetError, BrokenPipeError):
-                pass
 
 
 async def _mock_and_client(**kwargs):

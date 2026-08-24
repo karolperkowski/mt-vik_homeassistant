@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -73,10 +73,8 @@ async def _async_validate_input(hass: HomeAssistant, data: dict[str, Any]) -> st
         await client.async_refresh()
         # Best effort: PING / GetMCUFWVer (via full refresh, which tolerates
         # per-command timeouts) to get a model string for the entry title.
-        try:
+        with contextlib.suppress(MTVikiError):
             await client.async_full_refresh()
-        except MTVikiError:
-            pass
         model = client.state.model
     finally:
         await client.stop()

@@ -33,7 +33,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import Iterable
+from collections.abc import Iterable
+from typing import Self
 
 DEFAULT_FIRMWARE = "01.00.00"
 DEFAULT_IP = "192.168.1.186"
@@ -145,7 +146,7 @@ class MockMatrix:
             self._server = None
         self._tasks.clear()
 
-    async def __aenter__(self) -> "MockMatrix":
+    async def __aenter__(self) -> Self:
         await self.start()
         return self
 
@@ -201,7 +202,11 @@ class MockMatrix:
                 writer.write(blob)
                 await writer.drain()
             elif self.frame_mode == "split":
-                cut = self.split_at if self.split_at is not None else max(1, len(blob) // 2)
+                cut = (
+                    self.split_at
+                    if self.split_at is not None
+                    else max(1, len(blob) // 2)
+                )
                 cut = max(1, min(cut, len(blob) - 1)) if len(blob) > 1 else len(blob)
                 writer.write(blob[:cut])
                 await writer.drain()
@@ -438,7 +443,9 @@ class MockMatrix:
         self.received.clear()
         self.received_at.clear()
 
-    async def wait_for(self, keyword: str, count: int = 1, timeout: float = 2.0) -> None:
+    async def wait_for(
+        self, keyword: str, count: int = 1, timeout: float = 2.0
+    ) -> None:
         """Wait until ``keyword`` has been received at least ``count`` times."""
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
@@ -480,8 +487,7 @@ async def _main() -> None:  # pragma: no cover - manual smoke helper
     await mock.start()
     print(f"MockMatrix {size} listening on {mock.host}:{mock.port} (ctrl-c to stop)")
     try:
-        while True:
-            await asyncio.sleep(3600)
+        await asyncio.Event().wait()  # serve until interrupted
     except (KeyboardInterrupt, asyncio.CancelledError):
         await mock.stop()
 

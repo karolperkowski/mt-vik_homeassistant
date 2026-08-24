@@ -40,3 +40,4 @@ pytest-homeassistant-custom-component==0.13.357
 #   pip install pytest pytest-asyncio
 #   pytest tests/test_mock_matrix.py
 # tests/test_config_flow.py then skips itself cleanly (pytest.importorskip).
+ruff==0.16.4

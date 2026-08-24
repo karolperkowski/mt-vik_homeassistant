@@ -21,14 +21,13 @@ pytest.importorskip(
     reason="pytest-homeassistant-custom-component is required for HA flow tests",
 )
 
-from homeassistant import config_entries  # noqa: E402
-from homeassistant.core import HomeAssistant  # noqa: E402
-from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
-from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
+from homeassistant import config_entries
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
 
-from custom_components.mtviki_matrix.api import MTVikiConnectionError  # noqa: E402
+from custom_components.mtviki_matrix.api import MTVikiConnectionError
 
-from .conftest import (  # noqa: E402
+from .conftest import (
     DOMAIN,
     MOCK_CONFIG,
     MOCK_HOST,
@@ -95,7 +94,13 @@ async def test_user_step_creates_entry(
 
 @pytest.mark.parametrize(
     ("size", "expected"),
-    [("2x2", "2x2"), ("4x2", "4x2"), ("4x4", "4x4"), ("8x8", "8x8"), ("16x16", "16x16")],
+    [
+        ("2x2", "2x2"),
+        ("4x2", "4x2"),
+        ("4x4", "4x4"),
+        ("8x8", "8x8"),
+        ("16x16", "16x16"),
+    ],
 )
 async def test_all_matrix_sizes_accepted(
     hass: HomeAssistant, mock_client, mock_setup_entry, size, expected
@@ -276,14 +281,13 @@ async def test_options_flow_rejects_short_poll_interval(
 # ======================================================================
 
 
-async def test_setup_and_unload_entry(
-    hass: HomeAssistant, mock_config_entry
-) -> None:
+async def test_setup_and_unload_entry(hass: HomeAssistant, mock_config_entry) -> None:
     """The client must be started on setup and stopped on unload."""
     client = build_mock_client()
     mock_config_entry.add_to_hass(hass)
-    with patch(f"custom_components.{DOMAIN}.MTVikiClient", return_value=client), patch(
-        CLIENT_PATH, return_value=client
+    with (
+        patch(f"custom_components.{DOMAIN}.MTVikiClient", return_value=client),
+        patch(CLIENT_PATH, return_value=client),
     ):
         assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()

@@ -122,11 +122,11 @@ class MTVikiInputEdidSelect(MTVikiEntity, SelectEntity):
     _attr_entity_category = EntityCategory.CONFIG
     _attr_entity_registry_enabled_default = False
     _attr_assumed_state = True
-    _attr_options = [str(preset) for preset in range(1, EDID_PRESET_COUNT + 1)]
 
     def __init__(self, coordinator: MTVikiCoordinator, input_port: int) -> None:
         """Initialize the EDID select for one input."""
         super().__init__(coordinator)
+        self._attr_options = [str(preset) for preset in range(1, EDID_PRESET_COUNT + 1)]
         self._input = input_port
         self._attr_unique_id = (
             f"{coordinator.config_entry.entry_id}_input_{input_port}_edid"

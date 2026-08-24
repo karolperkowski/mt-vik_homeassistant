@@ -19,9 +19,9 @@ import pytest
 from custom_components.mtviki_matrix.api import (
     MATRIX_SIZES,
     MatrixState,
+    MTVikiClient,
     MTVikiConnectionError,
     MTVikiError,
-    MTVikiClient,
 )
 
 from .mock_matrix import MockMatrix
@@ -372,7 +372,16 @@ async def test_lf_only_and_blank_lines_are_tolerated():
         try:
             await mock.write_raw(b"\r\n\r\nSWS 8 7 6 5 4 3 2 1\n\r\n")
             await asyncio.sleep(0.2)
-            assert client.state.routes == {1: 8, 2: 7, 3: 6, 4: 5, 5: 4, 6: 3, 7: 2, 8: 1}
+            assert client.state.routes == {
+                1: 8,
+                2: 7,
+                3: 6,
+                4: 5,
+                5: 4,
+                6: 3,
+                7: 2,
+                8: 1,
+            }
         finally:
             await client.stop()
 

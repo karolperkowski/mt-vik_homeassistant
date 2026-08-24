@@ -64,9 +64,10 @@ import os
 import sys
 import threading
 import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Callable, Optional, Sequence
+from datetime import UTC, datetime
+from typing import Self
 
 __version__ = "1.0.0"
 
@@ -79,6 +80,7 @@ SCAN_PORTS: tuple[int, ...] = (8080, 5000, 23, 4001)
 # --------------------------------------------------------------------------------------
 # Protocol reference -- (syntax, expected reply, description, read_only)
 # --------------------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class ProtocolCommand:
@@ -93,29 +95,68 @@ class ProtocolCommand:
 PROTOCOL_COMMANDS: tuple[ProtocolCommand, ...] = (
     ProtocolCommand("PING", "FHDM88LAMG", "Identify device / model id", True),
     ProtocolCommand("GetMCUFWVer", "MCUVer 01.00.00", "Firmware version", True),
-    ProtocolCommand("GetSW", "SWS 1 2 3 4", "Query routing (pos N = input on output N)", True),
-    ProtocolCommand("SW <in> <out> [out...]", "SWS 1 2 3 4", "Route input to one or more outputs", False),
-    ProtocolCommand("GetKeyLock", "KeyLockStatus 1", "Front panel key lock state", True),
-    ProtocolCommand("SetKeyLock <1|0>", "KeyLockStatus 1", "Lock/unlock front panel", False),
+    ProtocolCommand(
+        "GetSW", "SWS 1 2 3 4", "Query routing (pos N = input on output N)", True
+    ),
+    ProtocolCommand(
+        "SW <in> <out> [out...]",
+        "SWS 1 2 3 4",
+        "Route input to one or more outputs",
+        False,
+    ),
+    ProtocolCommand(
+        "GetKeyLock", "KeyLockStatus 1", "Front panel key lock state", True
+    ),
+    ProtocolCommand(
+        "SetKeyLock <1|0>", "KeyLockStatus 1", "Lock/unlock front panel", False
+    ),
     ProtocolCommand("GetBeepEn", "BeepEn 0", "Buzzer enabled state", True),
     ProtocolCommand("SetBeepEn <1|0>", "BeepEn 1", "Enable/disable buzzer", False),
     ProtocolCommand("BeepONOnce", "(no reply)", "Beep once", False),
     ProtocolCommand("GetIP", "IP 192.168.1.186", "Device IP address", True),
     ProtocolCommand("GetIPMask", "IPMask 255.255.255.0", "Device netmask", True),
-    ProtocolCommand("GetInPortHDCP", "InPortHDCPS 1 0 1 1", "Per-input HDCP status", True),
-    ProtocolCommand("GetOutPortHDCP", "OutPortHDCPS 0 1 2 2", "Per-output HDCP mode", True),
-    ProtocolCommand("SetOutPortHDCP <out> <0|1|2|3>", "OutPortHDCPS 0 1 2 2",
-                    "Output HDCP: 0=off 1=HDCP1.4 2=HDCP2.0 3=HDCP2.2", False),
+    ProtocolCommand(
+        "GetInPortHDCP", "InPortHDCPS 1 0 1 1", "Per-input HDCP status", True
+    ),
+    ProtocolCommand(
+        "GetOutPortHDCP", "OutPortHDCPS 0 1 2 2", "Per-output HDCP mode", True
+    ),
+    ProtocolCommand(
+        "SetOutPortHDCP <out> <0|1|2|3>",
+        "OutPortHDCPS 0 1 2 2",
+        "Output HDCP: 0=off 1=HDCP1.4 2=HDCP2.0 3=HDCP2.2",
+        False,
+    ),
     ProtocolCommand("GetTitleLable", "TitleLable xxxxx", "Read title label", True),
-    ProtocolCommand("SetTitleLable <text>", "TitleLable xxxxx", "Write title label", False),
+    ProtocolCommand(
+        "SetTitleLable <text>", "TitleLable xxxxx", "Write title label", False
+    ),
     ProtocolCommand("GetServiceType", "ServiceType xxxx", "Read LCD line 1", True),
-    ProtocolCommand("SetServiceType <text>", "ServiceType xxxx", "Write LCD line 1", False),
+    ProtocolCommand(
+        "SetServiceType <text>", "ServiceType xxxx", "Write LCD line 1", False
+    ),
     ProtocolCommand("GetServiceNum", "ServiceNum xxxx", "Read LCD line 2", True),
-    ProtocolCommand("SetServiceNum <text>", "ServiceNum xxxx", "Write LCD line 2", False),
-    ProtocolCommand("SetEDID <in> <edid_select>", "InPortEdid <in> <sel>", "Assign preset EDID to input", False),
-    ProtocolCommand("GetEDIDData <in>", "EDIDData y xxxxxx", "Read raw EDID of input", True),
-    ProtocolCommand("SetEDIDData <in> <256-byte-hex>", "SetEDIDData OK", "Write raw EDID to input", False),
-    ProtocolCommand("SceneSave <n>", "SceneSaveOK", "Save current routing as scene n", False),
+    ProtocolCommand(
+        "SetServiceNum <text>", "ServiceNum xxxx", "Write LCD line 2", False
+    ),
+    ProtocolCommand(
+        "SetEDID <in> <edid_select>",
+        "InPortEdid <in> <sel>",
+        "Assign preset EDID to input",
+        False,
+    ),
+    ProtocolCommand(
+        "GetEDIDData <in>", "EDIDData y xxxxxx", "Read raw EDID of input", True
+    ),
+    ProtocolCommand(
+        "SetEDIDData <in> <256-byte-hex>",
+        "SetEDIDData OK",
+        "Write raw EDID to input",
+        False,
+    ),
+    ProtocolCommand(
+        "SceneSave <n>", "SceneSaveOK", "Save current routing as scene n", False
+    ),
     ProtocolCommand("SceneCall <n>", "SWS 1 2 3 4", "Recall scene n", False),
 )
 
@@ -144,6 +185,7 @@ _MUTATING_PREFIXES: tuple[str, ...] = ("SW ", "SET", "SCENE", "BEEPONONCE")
 # Errors
 # --------------------------------------------------------------------------------------
 
+
 class MTVikiError(Exception):
     """Base error for this module."""
 
@@ -156,6 +198,7 @@ class MTVikiConnectionError(MTVikiError):
 # Client
 # --------------------------------------------------------------------------------------
 
+
 @dataclass
 class TrafficEntry:
     """A single timestamped line of TX or RX traffic."""
@@ -166,7 +209,11 @@ class TrafficEntry:
 
     def format(self) -> str:
         """Render as ``12:34:56.789 TX >>> GetSW``."""
-        stamp = datetime.fromtimestamp(self.timestamp).strftime("%H:%M:%S.%f")[:-3]
+        stamp = (
+            datetime.fromtimestamp(self.timestamp, tz=UTC)
+            .astimezone()
+            .strftime("%H:%M:%S.%f")[:-3]
+        )
         arrow = {"TX": ">>>", "RX": "<<<"}.get(self.direction, "---")
         return f"{stamp} {self.direction} {arrow} {self.text}"
 
@@ -206,29 +253,29 @@ class MTVikiClient:
         *,
         timeout: float = DEFAULT_TIMEOUT,
         window: float = DEFAULT_WINDOW,
-        log_path: Optional[str] = None,
-        on_push: Optional[Callable[[ReceivedLine], None]] = None,
+        log_path: str | None = None,
+        on_push: Callable[[ReceivedLine], None] | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self.timeout = timeout
         self.window = window
-        self.on_push: Optional[Callable[[ReceivedLine], None]] = on_push
+        self.on_push: Callable[[ReceivedLine], None] | None = on_push
 
         self.traffic_log: list[TrafficEntry] = []
-        self.push_queue: "asyncio.Queue[ReceivedLine]" = asyncio.Queue()
+        self.push_queue: asyncio.Queue[ReceivedLine] = asyncio.Queue()
 
         self._log_path = log_path
         self._log_fh = None
-        self._reader: Optional[asyncio.StreamReader] = None
-        self._writer: Optional[asyncio.StreamWriter] = None
-        self._reader_task: Optional[asyncio.Task[None]] = None
+        self._reader: asyncio.StreamReader | None = None
+        self._writer: asyncio.StreamWriter | None = None
+        self._reader_task: asyncio.Task[None] | None = None
         self._buffer = bytearray()
-        self._resp_queue: "asyncio.Queue[object]" = asyncio.Queue()
+        self._resp_queue: asyncio.Queue[object] = asyncio.Queue()
         self._send_lock = asyncio.Lock()
         self._in_request = False
         self._connected = False
-        self._conn_error: Optional[MTVikiError] = None
+        self._conn_error: MTVikiError | None = None
 
     # -- properties ---------------------------------------------------------------
 
@@ -261,32 +308,43 @@ class MTVikiClient:
 
     # -- connection ---------------------------------------------------------------
 
-    async def connect(self) -> None:
-        """Open the TCP connection and start the reader task."""
+    def _ensure_log_open(self) -> None:
+        """Open the on-disk traffic log (long-lived handle, closed on disconnect)."""
         if self._log_path and self._log_fh is None:
             try:
-                self._log_fh = open(self._log_path, "a", encoding="utf-8")
+                # The handle deliberately outlives this scope (closed on disconnect).
+                self._log_fh = open(self._log_path, "a", encoding="utf-8")  # noqa: SIM115
             except OSError as exc:
-                raise MTVikiError(f"cannot open log file {self._log_path!r}: {exc}") from exc
+                raise MTVikiError(
+                    f"cannot open log file {self._log_path!r}: {exc}"
+                ) from exc
+
+    async def connect(self) -> None:
+        """Open the TCP connection and start the reader task."""
+        self._ensure_log_open()
 
         self._log("--", f"connecting to {self.target} (timeout {self.timeout}s)")
         try:
             self._reader, self._writer = await asyncio.wait_for(
                 asyncio.open_connection(self.host, self.port), self.timeout
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise MTVikiConnectionError(
                 f"timed out after {self.timeout}s connecting to {self.target}"
             ) from exc
         except ConnectionRefusedError as exc:
             raise MTVikiConnectionError(f"connection refused by {self.target}") from exc
         except OSError as exc:
-            raise MTVikiConnectionError(f"cannot connect to {self.target}: {exc}") from exc
+            raise MTVikiConnectionError(
+                f"cannot connect to {self.target}: {exc}"
+            ) from exc
 
         self._connected = True
         self._conn_error = None
         self._buffer.clear()
-        self._reader_task = asyncio.create_task(self._reader_loop(), name="mtviki-reader")
+        self._reader_task = asyncio.create_task(
+            self._reader_loop(), name="mtviki-reader"
+        )
         self._log("--", f"connected to {self.target}")
 
     async def close(self) -> None:
@@ -309,7 +367,7 @@ class MTVikiClient:
                 self._log_fh.close()
             self._log_fh = None
 
-    async def __aenter__(self) -> "MTVikiClient":
+    async def __aenter__(self) -> Self:
         await self.connect()
         return self
 
@@ -329,7 +387,9 @@ class MTVikiClient:
             del self._buffer[: idx + 1]
             lines.append(raw.decode("ascii", errors="replace").rstrip("\r"))
         if final and self._buffer:
-            lines.append(bytes(self._buffer).decode("ascii", errors="replace").rstrip("\r"))
+            lines.append(
+                bytes(self._buffer).decode("ascii", errors="replace").rstrip("\r")
+            )
             self._buffer.clear()
         return lines
 
@@ -345,7 +405,7 @@ class MTVikiClient:
         if self.on_push is not None:
             try:
                 self.on_push(line)
-            except Exception as exc:  # pragma: no cover - callback must not kill reader
+            except Exception as exc:  # noqa: BLE001 - callback must not kill reader
                 self._log("--", f"push callback error: {exc!r}")
 
     async def _reader_loop(self) -> None:
@@ -363,10 +423,11 @@ class MTVikiClient:
                     self._handle_line(text)
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - any read failure ends the session
             self._connected = False
             self._conn_error = (
-                exc if isinstance(exc, MTVikiError)
+                exc
+                if isinstance(exc, MTVikiError)
                 else MTVikiConnectionError(f"read error on {self.target}: {exc}")
             )
             self._log("--", f"connection lost: {self._conn_error}")
@@ -376,14 +437,16 @@ class MTVikiClient:
 
     def _ensure_connected(self) -> None:
         if not self._connected or self._writer is None:
-            raise self._conn_error or MTVikiConnectionError(f"not connected to {self.target}")
+            raise self._conn_error or MTVikiConnectionError(
+                f"not connected to {self.target}"
+            )
 
     async def send_command(
         self,
         command: str,
         *,
-        window: Optional[float] = None,
-        timeout: Optional[float] = None,
+        window: float | None = None,
+        timeout: float | None = None,
     ) -> list[str]:
         """Send ``command`` + CRLF and collect the reply lines.
 
@@ -413,17 +476,21 @@ class MTVikiClient:
                 while True:
                     try:
                         item = await asyncio.wait_for(self._resp_queue.get(), budget)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         break
                     if item is _CONN_LOST:
-                        raise self._conn_error or MTVikiConnectionError("connection lost")
+                        raise self._conn_error or MTVikiConnectionError(
+                            "connection lost"
+                        )
                     assert isinstance(item, ReceivedLine)
                     lines.append(item.text)
                     budget = window  # subsequent lines only get the silence window
                 return lines
             except (ConnectionResetError, BrokenPipeError, OSError) as exc:
                 self._connected = False
-                raise MTVikiConnectionError(f"write failed on {self.target}: {exc}") from exc
+                raise MTVikiConnectionError(
+                    f"write failed on {self.target}: {exc}"
+                ) from exc
             finally:
                 self._in_request = False
 
@@ -439,13 +506,14 @@ class MTVikiClient:
 # probe mode
 # --------------------------------------------------------------------------------------
 
+
 @dataclass
 class ProbeResult:
     """Outcome of one probed command."""
 
     command: str
     responses: list[str] = field(default_factory=list)
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
     def status(self) -> str:
@@ -463,12 +531,16 @@ def _is_mutating(command: str) -> bool:
 async def run_probe(args: argparse.Namespace) -> int:
     """Run the safe read-only command sweep."""
     client = MTVikiClient(
-        args.host, args.port, timeout=args.timeout, window=args.window, log_path=args.log
+        args.host,
+        args.port,
+        timeout=args.timeout,
+        window=args.window,
+        log_path=args.log,
     )
     client.on_push = lambda line: print(f"  [PUSH] {line.text}")
 
     print(f"MT-VIKI probe (read-only) -> {client.target}")
-    print(f"started {datetime.now().isoformat(timespec='seconds')}\n")
+    print(f"started {datetime.now().astimezone().isoformat(timespec='seconds')}\n")
     try:
         await client.connect()
     except MTVikiError as exc:
@@ -532,9 +604,11 @@ def _md_escape(text: str) -> str:
     return text.replace("|", "\\|")
 
 
-def _append_markdown(path: str, host: str, port: int, results: Sequence[ProbeResult]) -> None:
+def _append_markdown(
+    path: str, host: str, port: int, results: Sequence[ProbeResult]
+) -> None:
     """Append a PROTOCOL_VALIDATION.md style results section."""
-    stamp = datetime.now().isoformat(timespec="seconds")
+    stamp = datetime.now().astimezone().isoformat(timespec="seconds")
     lines = [
         "",
         f"## Probe run {stamp}",
@@ -562,6 +636,7 @@ def _append_markdown(path: str, host: str, port: int, results: Sequence[ProbeRes
 # scan mode
 # --------------------------------------------------------------------------------------
 
+
 async def _read_raw(reader: asyncio.StreamReader, seconds: float) -> bytes:
     """Collect whatever arrives within ``seconds``."""
     deadline = time.monotonic() + seconds
@@ -572,7 +647,7 @@ async def _read_raw(reader: asyncio.StreamReader, seconds: float) -> bytes:
             break
         try:
             chunk = await asyncio.wait_for(reader.read(4096), remaining)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             break
         if not chunk:
             break
@@ -589,7 +664,7 @@ async def run_scan(args: argparse.Namespace) -> int:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(args.host, port), 3.0
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             print(f"port {port:>5}: FILTERED (no response within 3s)")
             continue
         except ConnectionRefusedError:
@@ -609,8 +684,11 @@ async def run_scan(args: argparse.Namespace) -> int:
                 writer.write((command + "\r\n").encode("ascii"))
                 await writer.drain()
                 data = await _read_raw(reader, 2.0)
-                print(f"          {command:<6} -> {data!r}" if data
-                      else f"          {command:<6} -> (nothing within 2s)")
+                print(
+                    f"          {command:<6} -> {data!r}"
+                    if data
+                    else f"          {command:<6} -> (nothing within 2s)"
+                )
         except OSError as exc:
             print(f"          I/O error: {exc}")
         finally:
@@ -620,7 +698,9 @@ async def run_scan(args: argparse.Namespace) -> int:
         print()
 
     if not open_ports:
-        print("No open ports found. Check the IP address and that the device is powered on.")
+        print(
+            "No open ports found. Check the IP address and that the device is powered on."
+        )
         return 1
     print(f"Open port(s): {', '.join(str(p) for p in open_ports)}")
     return 0
@@ -646,7 +726,9 @@ def _repl_help() -> str:
     ]
     for cmd in PROTOCOL_COMMANDS:
         flag = " " if cmd.read_only else "!"
-        lines.append(f" {flag}{cmd.syntax.ljust(34)} {cmd.reply.ljust(26)} {cmd.description}")
+        lines.append(
+            f" {flag}{cmd.syntax.ljust(34)} {cmd.reply.ljust(26)} {cmd.description}"
+        )
     lines += [
         "",
         "  '!' marks commands that CHANGE device state.",
@@ -661,9 +743,9 @@ def _repl_help() -> str:
     return "\n".join(lines)
 
 
-def _setup_readline() -> Optional[object]:
+def _setup_readline() -> object | None:
     try:
-        import readline  # noqa: PLC0415
+        import readline
     except ImportError:
         return None
     with contextlib.suppress(OSError):
@@ -683,11 +765,15 @@ def run_repl(args: argparse.Namespace) -> int:
     thread = threading.Thread(target=loop.run_forever, name="mtviki-loop", daemon=True)
     thread.start()
 
-    def submit(coro, wait: Optional[float] = None):
+    def submit(coro, wait: float | None = None):
         return asyncio.run_coroutine_threadsafe(coro, loop).result(wait)
 
     client = MTVikiClient(
-        args.host, args.port, timeout=args.timeout, window=args.window, log_path=args.log
+        args.host,
+        args.port,
+        timeout=args.timeout,
+        window=args.window,
+        log_path=args.log,
     )
     client.on_push = lambda line: print(
         f"\n[PUSH] {line.text}\nmtviki> ", end="", flush=True
@@ -737,7 +823,7 @@ def run_repl(args: argparse.Namespace) -> int:
                 print(f"ERROR: {exc}")
                 exit_code = 2
                 break
-            except Exception as exc:  # pragma: no cover - defensive
+            except Exception as exc:  # noqa: BLE001 - REPL must not crash on odd input
                 print(f"ERROR: unexpected failure: {exc!r}")
                 exit_code = 2
                 break
@@ -762,21 +848,37 @@ def run_repl(args: argparse.Namespace) -> int:
 # CLI
 # --------------------------------------------------------------------------------------
 
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the argparse parser (global flags work before or after the sub-command)."""
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--host", help=f"device IP, e.g. {DEFAULT_HOST_HINT}",
-                        default=argparse.SUPPRESS)
-    common.add_argument("--port", type=int, help=f"TCP port (default {DEFAULT_PORT})",
-                        default=argparse.SUPPRESS)
-    common.add_argument("--timeout", type=float,
-                        help=f"seconds to wait for the first reply line (default {DEFAULT_TIMEOUT})",
-                        default=argparse.SUPPRESS)
-    common.add_argument("--window", type=float,
-                        help=f"silence window that ends a reply (default {DEFAULT_WINDOW}s)",
-                        default=argparse.SUPPRESS)
-    common.add_argument("--log", metavar="FILE", help="append the raw TX/RX traffic log to FILE",
-                        default=argparse.SUPPRESS)
+    common.add_argument(
+        "--host", help=f"device IP, e.g. {DEFAULT_HOST_HINT}", default=argparse.SUPPRESS
+    )
+    common.add_argument(
+        "--port",
+        type=int,
+        help=f"TCP port (default {DEFAULT_PORT})",
+        default=argparse.SUPPRESS,
+    )
+    common.add_argument(
+        "--timeout",
+        type=float,
+        help=f"seconds to wait for the first reply line (default {DEFAULT_TIMEOUT})",
+        default=argparse.SUPPRESS,
+    )
+    common.add_argument(
+        "--window",
+        type=float,
+        help=f"silence window that ends a reply (default {DEFAULT_WINDOW}s)",
+        default=argparse.SUPPRESS,
+    )
+    common.add_argument(
+        "--log",
+        metavar="FILE",
+        help="append the raw TX/RX traffic log to FILE",
+        default=argparse.SUPPRESS,
+    )
 
     parser = argparse.ArgumentParser(
         prog="mtviki_probe.py",
@@ -790,7 +892,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--version", action="version", version=f"mtviki_probe {__version__}")
+    parser.add_argument(
+        "--version", action="version", version=f"mtviki_probe {__version__}"
+    )
     # NOTE: no parser.set_defaults() here -- it mutates the shared parent actions, which
     # would make a sub-command reset a --host given before it.  Defaults are applied in
     # apply_defaults() instead, after parsing (every option uses default=SUPPRESS).
@@ -800,9 +904,15 @@ def build_parser() -> argparse.ArgumentParser:
     probe = subparsers.add_parser(
         "probe", parents=[common], help="automated read-only command sweep"
     )
-    probe.add_argument("--md", metavar="FILE", default=argparse.SUPPRESS,
-                       help="append a markdown results section to FILE")
-    subparsers.add_parser("scan", parents=[common], help="find which TCP port speaks the protocol")
+    probe.add_argument(
+        "--md",
+        metavar="FILE",
+        default=argparse.SUPPRESS,
+        help="append a markdown results section to FILE",
+    )
+    subparsers.add_parser(
+        "scan", parents=[common], help="find which TCP port speaks the protocol"
+    )
     return parser
 
 
@@ -826,7 +936,7 @@ def apply_defaults(args: argparse.Namespace) -> argparse.Namespace:
     return args
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     """Entry point."""
     parser = build_parser()
     args = apply_defaults(parser.parse_args(argv))

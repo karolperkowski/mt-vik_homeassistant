@@ -1,0 +1,21 @@
+# Lint config for the mtviki_matrix integration.
+# Ruleset mirrors ruff 0.16 defaults, pinned explicitly so CI is stable
+# across ruff releases.
+target-version = "py312"
+
+[lint]
+select = [
+    "E4", "E7", "E9", "F",   # pycodestyle / pyflakes core
+    "I",                     # isort
+    "UP",                    # pyupgrade
+    "RUF",                   # ruff-specific
+    "SIM",                   # flake8-simplify
+    "BLE",                   # flake8-blind-except
+    "ASYNC",                 # flake8-async
+    "DTZ",                   # flake8-datetimez
+    "PYI",                   # flake8-pyi
+    "EXE",                   # flake8-executable
+]
+# ASYNC109 (async functions with a `timeout` parameter) is deprecated upstream
+# and the timeout/window parameters are part of the documented client API.
+ignore = ["ASYNC109"]

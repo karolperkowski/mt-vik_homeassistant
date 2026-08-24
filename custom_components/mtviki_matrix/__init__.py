@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant, ServiceCall, callback
@@ -14,7 +13,8 @@ from homeassistant.exceptions import (
     HomeAssistantError,
     ServiceValidationError,
 )
-from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 
 from .api import MATRIX_SIZES, MTVikiClient, MTVikiConnectionError, MTVikiError
@@ -108,9 +108,7 @@ def _async_get_coordinator(hass: HomeAssistant, call: ServiceCall) -> MTVikiCoor
     if (entry_id := call.data.get(ATTR_CONFIG_ENTRY_ID)) is not None:
         candidate = hass.config_entries.async_get_entry(entry_id)
         if candidate is None or candidate.domain != DOMAIN:
-            raise ServiceValidationError(
-                f"'{entry_id}' is not a {DOMAIN} config entry"
-            )
+            raise ServiceValidationError(f"'{entry_id}' is not a {DOMAIN} config entry")
         entry = candidate
     else:
         device_id: str = call.data[ATTR_DEVICE_ID]
