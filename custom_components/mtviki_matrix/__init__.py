@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import voluptuous as vol
+from homeassistant.components.frontend import add_extra_js_url
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant, ServiceCall, callback
@@ -16,6 +19,7 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.setup import async_when_setup
 
 from .api import MATRIX_SIZES, MTVikiClient, MTVikiConnectionError, MTVikiError
 from .const import (
@@ -30,6 +34,8 @@ from .const import (
     ATTR_OUTPUT,
     ATTR_OUTPUTS,
     ATTR_SCENE,
+    CARD_FILENAME,
+    CARD_URL_PATH,
     CONF_MATRIX_SIZE,
     DEFAULT_MATRIX_SIZE,
     DOMAIN,
@@ -45,6 +51,15 @@ from .const import (
 from .coordinator import MTVikiConfigEntry, MTVikiCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+_CARD_JS_PATH = Path(__file__).parent / "www" / CARD_FILENAME
+
+# Guards _async_register_frontend_resources against running more than once
+# per HA process. async_setup() below is itself only ever called once by HA
+# per domain load, so in practice this is redundant with that guarantee, but
+# it costs nothing and makes "register once" true by construction rather
+# than by relying on a caller's behavior.
+_DATA_FRONTEND_RESOURCE_REGISTERED = f"{DOMAIN}_frontend_resource_registered"
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -251,9 +266,43 @@ def _async_register_services(hass: HomeAssistant) -> None:
     )
 
 
+async def _async_register_frontend_resources(hass: HomeAssistant) -> None:
+    """Serve the crosspoint Lovelace card and register it as a frontend resource.
+
+    Runs once from async_setup() (component-level, independent of how many
+    config entries exist) rather than async_setup_entry(), so it happens
+    exactly once no matter how many matrices are configured.
+
+    The static path only needs `http`, which is a hard manifest dependency
+    (async_setup() cannot run before it), so hass.http is guaranteed to
+    exist here. Registering it as a frontend *resource* additionally needs
+    `frontend` itself to have already run its own async_setup (it is what
+    creates the hass.data bucket add_extra_js_url() writes into) -- but
+    `frontend` is deliberately NOT a hard dependency, so that a headless
+    installation that never loads the UI at all is not forced to load it
+    just for this integration. Instead, async_when_setup() defers the call
+    until `frontend` finishes setting up: it fires immediately if frontend
+    is already up (the common case, since frontend normally loads early),
+    or later if not, and does nothing at all if frontend is never loaded.
+    """
+    if hass.data.get(_DATA_FRONTEND_RESOURCE_REGISTERED):
+        return
+    hass.data[_DATA_FRONTEND_RESOURCE_REGISTERED] = True
+
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(CARD_URL_PATH, str(_CARD_JS_PATH), cache_headers=True)]
+    )
+
+    async def _async_add_resource(hass: HomeAssistant, _component: str) -> None:
+        add_extra_js_url(hass, CARD_URL_PATH)
+
+    async_when_setup(hass, "frontend", _async_add_resource)
+
+
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the MT-VIKI HDMI Matrix component (register services once)."""
     _async_register_services(hass)
+    await _async_register_frontend_resources(hass)
     return True
 
 

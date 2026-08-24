@@ -76,6 +76,14 @@ ALL_OUTPUTS = "all"
 # Event fired on the HA bus when an output's routed input changes (see coordinator.py).
 EVENT_ROUTE_CHANGED = "mtviki_matrix_route_changed"
 
+# Lovelace crosspoint card: a single static JS file served by the integration
+# itself and auto-registered as a frontend resource (see
+# __init__.py:_async_register_frontend_resources). The URL path is also the
+# card's identity from the browser's point of view, so it is centralized here
+# rather than inlined at each call site.
+CARD_FILENAME = "mtviki-matrix-card.js"
+CARD_URL_PATH = f"/{DOMAIN}/{CARD_FILENAME}"
+
 # Opt-in network-scan discovery (config flow only; never runs automatically).
 CONF_NETWORK = "network"
 CONF_DEVICE = "device"

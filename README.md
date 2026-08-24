@@ -384,6 +384,64 @@ cards:
 > short — *HDMI Matrix* — right after setup and the IDs above will match. Check
 > **Developer tools → States** for the actual names.
 
+### Crosspoint card
+
+*(screenshot placeholder — a grid of inputs × outputs with the active route
+highlighted per row goes here)*
+
+A custom Lovelace card that renders the matrix as an actual crosspoint grid —
+columns are inputs, rows are outputs, and clicking a cell routes that input to
+that output. It ships inside the integration
+(`custom_components/mtviki_matrix/www/mtviki-matrix-card.js`) as a single
+file with no build step and no external imports, so it works offline and
+under Home Assistant's default frontend CSP.
+
+The integration serves the file itself and registers it as a Lovelace
+resource automatically — **no manual resource entry needed** for
+UI-mode ("Storage") dashboards. If your dashboard is in **YAML mode**
+(`lovelace: mode: yaml` in `configuration.yaml`), automatic resource
+registration doesn't apply to you; add it by hand instead:
+
+```yaml
+# configuration.yaml
+lovelace:
+  mode: yaml
+  resources:
+    - url: /mtviki_matrix/mtviki-matrix-card.js
+      type: module
+```
+
+Add the card to a dashboard with `outputs` omitted to auto-discover every
+output routing select belonging to the matrix:
+
+```yaml
+type: custom:mtviki-matrix-card
+title: HDMI Matrix
+scenes:
+  - button.hdmi_matrix_scene_1
+  - button.hdmi_matrix_scene_2
+```
+
+Or list the output selects explicitly — useful if you have more than one
+matrix and want separate cards per device, or want to control the row order:
+
+```yaml
+type: custom:mtviki-matrix-card
+title: HDMI Matrix
+outputs:
+  - select.hdmi_matrix_output_1
+  - select.hdmi_matrix_output_2
+  - select.hdmi_matrix_output_3
+  - select.hdmi_matrix_output_4
+scenes:
+  - button.hdmi_matrix_scene_1
+  - button.hdmi_matrix_scene_2
+```
+
+Unavailable outputs render dimmed and are inert (no click). Column labels
+follow whatever you set in **Name your inputs** (see [Options](#options)
+above); row labels are each select's friendly name.
+
 ---
 
 ## Troubleshooting

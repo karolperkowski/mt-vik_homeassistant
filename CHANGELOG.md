@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Crosspoint Lovelace card (`mtviki-matrix-card`): a single-file, no-build
+  custom card rendering the matrix as an inputs × outputs grid, with a row
+  of scene buttons underneath. Ships inside the integration and is served
+  and registered as a frontend resource automatically — no manual resource
+  entry needed for UI-mode dashboards. Outputs can be listed explicitly or
+  auto-discovered from the entity registry.
+
 ## [0.2.0] - 2026-08-24
 
 ### Added
