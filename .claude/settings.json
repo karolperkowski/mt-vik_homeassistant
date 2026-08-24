@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pytest:*)",
+      "Bash(python3 -m pytest:*)",
+      "Bash(ruff:*)",
+      "Bash(python3 -m ruff:*)",
+      "Bash(node --check:*)",
+      "Bash(python3 -m py_compile:*)",
+      "Bash(python3 -m json.tool:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh release view:*)",
+      "Bash(gh pr list:*)"
+    ]
+  }
+}
