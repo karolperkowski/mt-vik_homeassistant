@@ -35,6 +35,8 @@ publishes. CI: tests.yml (ruff+pytest), validate.yml (HACS+hassfest).
   them at that moment. A rule that only applies "going forward" creates drift
   by definition. Same when a bug class is caught once: check the whole repo
   for other instances of it before moving on.
+- **Always push after commit**: every commit is pushed immediately, without
+  asking — no local commits or tags may ever sit unpushed after a session.
 - **Parallelize via subagents**: for any multi-part task, split the
   independent chunks and run them as concurrent subagents (Agent tool,
   `model: opus`), each with a clear plan and reporting back a summary; the
