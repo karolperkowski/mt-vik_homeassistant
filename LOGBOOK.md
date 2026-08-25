@@ -11,13 +11,33 @@ work session lands something or a decision is made.
 | Integration (HACS-installable) | ✅ complete, unvalidated on hardware |
 | Test suite | ✅ 150 passing (mock-based) |
 | CI (lint, pytest, HACS, hassfest) | ✅ all green |
-| Releases | v0.1.0 · v0.2.0 · v0.3.0 (tag-driven pipeline) |
+| Releases | v0.1.0 · v0.2.0 · v0.3.0 (tag-driven pipeline; v0.1.0 tag/release lost in history rewrite — see 2026-08-24 janitorial entry) |
 | **Hardware validation** | ⬜ **blocked — no physical unit yet** |
 | HACS default store + brands | ⬜ deferred until hardware-validated |
 | Serial/RS-232 transport | ⬜ deferred until hardware available |
 | Passive discovery (DHCP/OUI) | ⬜ needs MAC/OUI from real unit |
 
 ## Log
+
+### 2026-08-24 — Janitorial pass: drift audit + session workflow rules
+- Drift audit found the **v0.1.0 tag missing** both locally and on GitHub —
+  lost in the history rewrite (tags point at pre-rewrite hashes) — while
+  CHANGELOG/LOGBOOK still referenced it. Original tag point identified as
+  `207437c` (manifest 0.1.0 + changelog with only the 0.1.0 section); tag
+  recreated **locally only**. Pushing it would trigger release.yml and the
+  new release would be marked "Latest" — if restoring it on GitHub, push the
+  tag, then `gh release edit v0.3.0 --latest`.
+- Fixed CHANGELOG link refs (stale: `[Unreleased]` compared from v0.1.0, no
+  0.2.0/0.3.0 refs; 0.1.0-era links now commit-based since the public tag is
+  gone). Added `.ruff_cache/` to .gitignore; removed local `__pycache__`.
+- Verified doc claims against reality: 150 tests pass, ruff lint+format
+  clean, hacs/manifest/workflows consistent, README accurate (one known
+  screenshot placeholder for the crosspoint card remains).
+- Added **session workflow rules** to CLAUDE.md (mirrored in Claude's global
+  memory): drift check at the start of any codebase-touching session;
+  every new rule or caught error class is immediately backported across the
+  existing repo; multi-part work is parallelized via Opus subagents given
+  fully-specified plans.
 
 ### 2026-08-24 — Cards, naming, releases
 - Cut **v0.3.0**: crosspoint Lovelace card (`www/mtviki-matrix-card.js`),

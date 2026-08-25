@@ -22,6 +22,27 @@ move CHANGELOG `[Unreleased]` into a dated section, commit, `git tag vX.Y.Z`,
 push tag → release.yml verifies (tag==manifest version, lint, tests) and
 publishes. CI: tests.yml (ruff+pytest), validate.yml (HACS+hassfest).
 
+## Session workflow rules
+
+- **Drift check first**: at the start of any session that will touch the
+  codebase, verify the docs against reality before new work — CHANGELOG
+  sections/link refs vs actual git tags and GitHub releases, manifest version
+  vs latest tag, LOGBOOK status table, README claims, test counts quoted in
+  docs, .gitignore vs cruft on disk. Fix any drift as its own step.
+- **Backport every new rule**: when a rule, convention, or style is adopted
+  mid-project (as the no-trailers rule was), immediately sweep everything that
+  already exists — code, docs, git tags/releases, CI — for violations and fix
+  them at that moment. A rule that only applies "going forward" creates drift
+  by definition. Same when a bug class is caught once: check the whole repo
+  for other instances of it before moving on.
+- **Parallelize via subagents**: for any multi-part task, split the
+  independent chunks and run them as concurrent subagents (Agent tool,
+  `model: opus`), each with a clear plan and reporting back a summary; the
+  main session integrates the results. Subagent prompts must be
+  fully-specified — exact paths, commands, expected outputs, and decision
+  criteria — so agents never have to come back with questions. Only trivial
+  single-step edits are done inline.
+
 ## Hard rules
 
 - **No Claude attribution on commits** — no Co-Authored-By/Claude-Session
