@@ -37,6 +37,10 @@ publishes. CI: tests.yml (ruff+pytest), validate.yml (HACS+hassfest).
   for other instances of it before moving on.
 - **Always push after commit**: every commit is pushed immediately, without
   asking — no local commits or tags may ever sit unpushed after a session.
+- **Cheap model for trivial chores**: pushes, cache cleanup, file moves,
+  formatting runs, and similar mechanical housekeeping go to a Haiku
+  subagent (Agent tool, `model: haiku`) with an exact command list — fast
+  and token-cheap. Anything needing judgment stays on the stronger model.
 - **Parallelize via subagents**: for any multi-part task, split the
   independent chunks and run them as concurrent subagents (Agent tool,
   `model: opus`), each with a clear plan and reporting back a summary; the
