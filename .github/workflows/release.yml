@@ -16,10 +16,22 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
+
+      - name: Reject AI-attribution trailers anywhere in history
+        run: |
+          set -euo pipefail
+          if git log --all --format='%B%n%an %ae%n%cn %ce' \
+            | grep -qiE 'co-authored-by:.*claude|noreply@anthropic\.com|claude-session|generated with \[?claude'; then
+            echo "::error::Claude/AI attribution found in commit history — release blocked."
+            exit 1
+          fi
+          echo "OK: history is free of AI attribution"
 
       - name: Verify tag matches manifest version
         env:

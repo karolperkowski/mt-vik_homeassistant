@@ -36,3 +36,20 @@ jobs:
           version: "0.16.4"
       - name: Ruff format check
         run: ruff format --check custom_components tests mtviki_probe.py
+
+  attribution-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Reject AI-attribution trailers anywhere in history
+        run: |
+          set -euo pipefail
+          if git log --all --format='%B%n%an %ae%n%cn %ce' \
+            | grep -qiE 'co-authored-by:.*claude|noreply@anthropic\.com|claude-session|generated with \[?claude'; then
+            echo "::error::Claude/AI attribution found in commit history. Standing rule: no attribution trailers, ever."
+            git log --all --format='%h %s%n%B' | grep -inE 'co-authored-by:.*claude|noreply@anthropic\.com|claude-session' | head -20
+            exit 1
+          fi
+          echo "OK: history is free of AI attribution"

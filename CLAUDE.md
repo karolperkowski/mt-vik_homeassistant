@@ -50,7 +50,11 @@ publishes. CI: tests.yml (ruff+pytest), validate.yml (HACS+hassfest).
 ## Hard rules
 
 - **No Claude attribution on commits** — no Co-Authored-By/Claude-Session
-  trailers, ever (history was scrubbed of them once already).
+  trailers, ever (history was scrubbed once; leaked PR refs later forced a
+  full repo recreation). Enforced in depth: user-level Claude Code
+  `attribution` settings suppress generation, a global git commit-msg hook
+  (`~/.githooks`) rejects locally, and CI (tests.yml + release.yml) blocks
+  any push or release whose history contains attribution.
 - `api.py` stays stdlib-only, zero HA imports (independently testable).
 - No optimistic state updates — state changes only from device reply lines.
 - ruff is pinned (0.16.4, ruff.toml, py312 target); lint+format must pass.
