@@ -19,6 +19,30 @@ work session lands something or a decision is made.
 
 ## Log
 
+### 2026-08-25 — Attribution purge: repo recreated; guards installed
+- Claude co-author trailers were still publicly visible despite the earlier
+  history scrub: GitHub keeps PR refs (`refs/pull/*`) forever, and the two
+  pre-rewrite Dependabot PRs preserved the original trailered commits.
+  Live history, contributors API, and sidebar were already clean.
+- Fix chosen (user decision): **deleted and recreated the repo** (0 stars,
+  0 real issues, 0 secrets — only the tainted PRs were lost). Same
+  name/description/topics → same URL; pushed clean main + all tags.
+- Landmine: pushing the three tags in one push triggered **no** release
+  workflows (no runs, no releases). Releases were recreated directly via
+  `gh release create --verify-tag --generate-notes` (each tag's content had
+  already passed the verify pipeline); v0.3.0 marked Latest. When restoring
+  tags in future, push them one per push or expect to create releases by
+  hand.
+- Verified end state: contributors = owner only; zero `refs/pull/*`; old
+  trailered SHAs return "no commit found"; releases v0.1.0–v0.3.0 present,
+  v0.3.0 Latest.
+- Prevention (defense in depth): user-level Claude Code `attribution`
+  settings (no trailer generation anywhere), global `~/.githooks/commit-msg`
+  hook (rejects attributed commits machine-wide, tested both paths), and an
+  `attribution-guard` CI job in tests.yml + release.yml (blocks any push or
+  release whose history contains attribution — green on first run). The
+  /tidy skill now audits history and PR refs for attribution in any repo.
+
 ### 2026-08-24 — Janitorial pass: drift audit + session workflow rules
 - Drift audit found the **v0.1.0 tag missing** both locally and on GitHub —
   lost in the history rewrite (tags point at pre-rewrite hashes) — while
