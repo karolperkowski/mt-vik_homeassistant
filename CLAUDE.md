@@ -25,10 +25,8 @@ publishes. CI: tests.yml (ruff+pytest), validate.yml (HACS+hassfest).
 ## Session workflow rules
 
 - **Drift check first**: at the start of any session that will touch the
-  codebase, verify the docs against reality before new work — CHANGELOG
-  sections/link refs vs actual git tags and GitHub releases, manifest version
-  vs latest tag, LOGBOOK status table, README claims, test counts quoted in
-  docs, .gitignore vs cruft on disk. Fix any drift as its own step.
+  codebase, run the `/tidy` skill (user-level, `~/.claude/skills/tidy/`) —
+  full docs-vs-reality audit and cleanup — before new work.
 - **Backport every new rule**: when a rule, convention, or style is adopted
   mid-project (as the no-trailers rule was), immediately sweep everything that
   already exists — code, docs, git tags/releases, CI — for violations and fix
