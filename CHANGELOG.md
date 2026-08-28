@@ -53,5 +53,5 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 [Unreleased]: https://github.com/karolperkowski/mt-vik_homeassistant/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/karolperkowski/mt-vik_homeassistant/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/karolperkowski/mt-vik_homeassistant/compare/207437c...v0.2.0
-[0.1.0]: https://github.com/karolperkowski/mt-vik_homeassistant/tree/207437c
+[0.2.0]: https://github.com/karolperkowski/mt-vik_homeassistant/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/karolperkowski/mt-vik_homeassistant/releases/tag/v0.1.0
