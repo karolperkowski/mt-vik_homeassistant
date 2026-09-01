@@ -12,7 +12,7 @@
 # so it is the only line that really needs pinning. The rest are recorded for
 # reproducibility.
 # ---------------------------------------------------------------------------
-pytest-homeassistant-custom-component==0.13.357
+pytest-homeassistant-custom-component==0.13.359
 
 # Pulled in transitively by the pin above -- listed to document the exact
 # versions the suite was verified against. Do not bump these independently of
